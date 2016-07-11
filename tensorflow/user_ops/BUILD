@@ -56,6 +56,26 @@ py_tests(
     data = [":invalid_op.so"],
 )
 
+
+tf_custom_op_library(
+    name = "floaty_ops.so",
+    srcs = [
+        "floaty_ops.cc",
+        "floaty_op_kernels.cc",
+
+        # HACK: include header files in src list, because this Bazel
+        # directive doesn't have a separate "headers" field
+        "floaty_op_kernels.h"
+    ],
+    gpu_srcs = [
+        "floaty_op_kernels_gpu.cu.cc",
+
+        # same hack
+        "floaty_op_kernels.h",
+    ],
+)
+
+
 filegroup(
     name = "all_files",
     srcs = glob(
