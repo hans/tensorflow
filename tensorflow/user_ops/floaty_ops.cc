@@ -25,10 +25,11 @@ typedef shape_inference::Shape Shape;
 // --------------------------------------------------------------------------
 REGISTER_OP("FloatyGather")
     .Input("params: Tparams")
-    .Input("indices: float")
+    .Input("indices: Tindices")
     .Attr("validate_indices: bool = true")
     .Output("output: Tparams")
     .Attr("Tparams: type")
+    .Attr("Tindices: {float}")
     .SetShapeFn(OpShapeInferenceFn([](InferenceContext* c) {
       const Shape* params_subshape;
       TF_RETURN_IF_ERROR(c->Subshape(c->input(0), 1, &params_subshape));
@@ -46,10 +47,11 @@ This is just like Gather except that `indices` may be floats.
 
 REGISTER_OP("FloatyScatterUpdate")
     .Input("ref: Ref(T)")
-    .Input("indices: float")
+    .Input("indices: Tindices")
     .Input("updates: T")
     .Output("output_ref: Ref(T)")
     .Attr("T: type")
+    .Attr("Tindices: {float}")
     .Attr("use_locking: bool = true")
     .Doc(R"doc(
 Applies sparse updates to a variable reference.

@@ -13,8 +13,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifndef TENSORFLOW_USER_OPS_FLOATY_OP_KERNELS_H_
-#define TENSORFLOW_USER_OPS_FLOATY_OP_KERNELS_H_
+#ifndef TENSORFLOW_USER_OPS_FLOATY_SCATTER_KERNEL_H_
+#define TENSORFLOW_USER_OPS_FLOATY_SCATTER_KERNEL_H_
 // Functor definition for GatherOp, must be compilable by nvcc.
 
 #include "third_party/eigen3/unsupported/Eigen/CXX11/Tensor"
@@ -24,25 +24,16 @@ namespace tensorflow {
 
 class OpKernelContext;
 
-namespace floaty_op_kernels {
+namespace floaty_scatter_kernel {
 
 enum class UpdateOp { ASSIGN, ADD, SUB };
 
-}  // namespace floaty_op_kernels
+}  // namespace floaty_scatter_kernel
 
 namespace functor {
-template <typename Device, typename T, typename Index>
-struct FloatyGather {
-  // Performs gather op on (Tparams, Tindices), writing to Tout.
-  // Returns an index to Tindices if the value at that index is out of range.
-  // Returns -1 if all values of Tindices are in range.
-  Index operator()(const Device& d, typename TTypes<T>::ConstMatrix Tparams,
-                   typename TTypes<Index>::ConstFlat Tindices,
-                   typename TTypes<T>::Matrix Tout);
-};
 
 // Functor used by ScatterOp to do the computations.
-template <typename Device, typename T, typename Index, floaty_op_kernels::UpdateOp op>
+template <typename Device, typename T, typename Index, floaty_scatter_kernel::UpdateOp op>
 struct FloatyScatterFunctor {
   // Returns -1 on success or a nonnegative i s.t. indices[i] is a bad index.
   Index operator()(OpKernelContext* c, const Device& d,
@@ -54,4 +45,4 @@ struct FloatyScatterFunctor {
 }  // namespace functor
 }  // namespace tensorflow
 
-#endif  // TENSORFLOW_USER_OPS_FLOATY_OP_KERNELS_H_
+#endif  // TENSORFLOW_USER_OPS_FLOATY_SCATTER_KERNEL_H_

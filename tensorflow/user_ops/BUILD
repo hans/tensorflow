@@ -61,17 +61,22 @@ tf_custom_op_library(
     name = "floaty_ops.so",
     srcs = [
         "floaty_ops.cc",
-        "floaty_op_kernels.cc",
+
+        "floaty_gather_kernel.cc",
+        "floaty_scatter_kernel.cc",
 
         # HACK: include header files in src list, because this Bazel
         # directive doesn't have a separate "headers" field
-        "floaty_op_kernels.h"
+        "floaty_gather_kernel.h",
+        "floaty_scatter_kernel.h"
     ],
     gpu_srcs = [
-        "floaty_op_kernels_gpu.cu.cc",
+        "floaty_gather_kernel_gpu.cu.cc",
+        "floaty_scatter_kernel_gpu.cu.cc",
 
         # same hack
-        "floaty_op_kernels.h",
+        "floaty_gather_kernel.h",
+        "floaty_scatter_kernel.h"
     ],
 )
 
