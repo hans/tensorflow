@@ -80,6 +80,13 @@ tf_custom_op_library(
     ],
 )
 
+py_tests(
+    name = "floaty_gather_op_test",
+    size = "small",
+    srcs = ["floaty_gather_op_test.py"],
+    data = [":floaty_ops.so"],
+)
+
 
 filegroup(
     name = "all_files",
