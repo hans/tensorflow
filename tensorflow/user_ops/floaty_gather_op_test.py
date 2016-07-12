@@ -21,8 +21,7 @@ from __future__ import print_function
 import numpy as np
 import tensorflow as tf
 
-
-floaty = tf.load_op_library("floaty_ops.so")
+from tensorflow.user_ops import floaty_ops as floaty
 
 
 class FloatyGatherTest(tf.test.TestCase):
@@ -62,10 +61,10 @@ class FloatyGatherTest(tf.test.TestCase):
     np.random.seed(1)
     shape = (4, 3, 2)
     params = np.random.randn(*shape)
-    indices = np.random.randint(shape[0], size=15, dtype=np.float32).reshape(3, 5)
+    indices = np.random.randint(shape[0], size=15).reshape(3, 5)
     with self.test_session(use_gpu=self.use_gpu):
       tf_params = tf.constant(params)
-      tf_indices = tf.constant(indices)
+      tf_indices = tf.constant(indices, dtype=tf.float32)
       gather = floaty.floaty_gather(tf_params, tf_indices)
       self.assertAllEqual(params[indices], gather.eval())
       self.assertEqual(indices.shape + params.shape[1:], gather.get_shape())
@@ -96,7 +95,7 @@ class FloatyGatherTest(tf.test.TestCase):
         gather.eval()
 
 
-class GatherGpuTest(GatherTest):
+class GatherGpuTest(FloatyGatherTest):
   use_gpu = True
 
 

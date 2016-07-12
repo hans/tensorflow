@@ -1,0 +1,29 @@
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
+import os
+import sys
+import numpy as np
+
+import tensorflow as tf
+from tensorflow.python.framework import common_shapes
+from tensorflow.python.framework import constant_op
+from tensorflow.python.framework import dtypes
+from tensorflow.python.framework import ops
+
+
+_module = tf.load_op_library(os.path.join(tf.resource_loader.get_data_files_path(), "floaty_ops_impl.so"))
+
+floaty_gather = _module.floaty_gather
+floaty_scatter_update = _module.floaty_scatter_update
+
+
+@ops.RegisterShape("FloatyGather")
+def _FloatyGatherShape(op):
+  """Shape function for array_ops.gather."""
+  params_shape = op.inputs[0].get_shape()
+  indices_shape = op.inputs[1].get_shape()
+  return [indices_shape.concatenate(params_shape[1:])]
+
+

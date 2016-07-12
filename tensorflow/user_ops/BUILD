@@ -58,7 +58,7 @@ py_tests(
 
 
 tf_custom_op_library(
-    name = "floaty_ops.so",
+    name = "floaty_ops_impl.so",
     srcs = [
         "floaty_ops.cc",
 
@@ -80,11 +80,21 @@ tf_custom_op_library(
     ],
 )
 
-py_tests(
+py_library(
+    name = "floaty_ops",
+    srcs = ["floaty_ops.py"],
+    data = [":floaty_ops_impl.so"],
+    deps = [
+        "//tensorflow:tensorflow_py",
+    ],
+)
+
+py_test(
     name = "floaty_gather_op_test",
     size = "small",
     srcs = ["floaty_gather_op_test.py"],
-    data = [":floaty_ops.so"],
+    deps = [":floaty_ops"],
+    data = [":floaty_ops_impl.so"],
 )
 
 
