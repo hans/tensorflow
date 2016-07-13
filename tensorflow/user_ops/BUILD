@@ -71,6 +71,10 @@ tf_custom_op_library(
         "floaty_scatter_kernel.h"
     ],
     gpu_srcs = [
+        "floaty_ops.cc",
+        "floaty_gather_kernel.cc",
+        "floaty_scatter_kernel.cc",
+
         "floaty_gather_kernel_gpu.cu.cc",
         "floaty_scatter_kernel_gpu.cu.cc",
 
@@ -79,6 +83,7 @@ tf_custom_op_library(
         "floaty_scatter_kernel.h"
     ],
 )
+
 
 py_library(
     name = "floaty_ops",
