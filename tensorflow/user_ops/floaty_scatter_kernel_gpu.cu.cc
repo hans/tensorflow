@@ -41,16 +41,8 @@ __global__ void FloatyScatterOpCustomKernel(
     }
     int params_i = param_first_index * update_block + (i % update_block);
     switch (op) {
-      case scatter_op::UpdateOp::ASSIGN: {
+      case floaty_scatter_kernel::UpdateOp::ASSIGN: {
         params[params_i] = ldg(updates + updates_i);
-        break;
-      }
-      case scatter_op::UpdateOp::ADD: {
-        CudaAtomicAdd(params + params_i, ldg(updates + updates_i));
-        break;
-      }
-      case scatter_op::UpdateOp::SUB: {
-        CudaAtomicSub(params + params_i, ldg(updates + updates_i));
         break;
       }
     }
@@ -72,7 +64,7 @@ struct FloatyScatterFunctor<GPUDevice, T, Index, op> {
     int indices_size = indices.size();
     int updates_size = updates.size();
     CudaLaunchConfig config = GetCudaLaunchConfig(updates_size, d);
-    ScatterOpCustomKernel<T,Index,op>
+    FloatyScatterOpCustomKernel<T,Index,op>
         <<<config.block_count, config.thread_per_block, 0, d.stream()>>>(
             params.data(), updates.data(), indices.data(),
             first_dim_size, updates_size, indices_size);
@@ -83,12 +75,10 @@ struct FloatyScatterFunctor<GPUDevice, T, Index, op> {
 }  // namespace functor
 
 #define DEFINE_GPU_SPECS_OP(T, Index, op)                               \
-  template struct functor::ScatterFunctor<GPUDevice, T, Index, op>;
+  template struct functor::FloatyScatterFunctor<GPUDevice, T, Index, op>;
 
 #define DEFINE_GPU_SPECS_INDEX(T, Index)                        \
-  DEFINE_GPU_SPECS_OP(T, Index, scatter_op::UpdateOp::ASSIGN);  \
-  DEFINE_GPU_SPECS_OP(T, Index, scatter_op::UpdateOp::ADD);     \
-  DEFINE_GPU_SPECS_OP(T, Index, scatter_op::UpdateOp::SUB);
+  DEFINE_GPU_SPECS_OP(T, Index, floaty_scatter_kernel::UpdateOp::ASSIGN);
 
 #define DEFINE_GPU_SPECS(T)                     \
   DEFINE_GPU_SPECS_INDEX(T, float);
@@ -101,11 +91,6 @@ DEFINE_GPU_SPECS(double);
 #undef DEFINE_GPU_SPECS
 #undef DEFINE_GPU_SPECS_INDEX
 #undef DEFINE_GPU_SPECS_OP
-
-
-
-
-}  // namespace functor
 
 }  // namespace tensorflow
 

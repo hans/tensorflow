@@ -32,16 +32,15 @@ __global__ void FloatyGatherOpKernel(const T* params, const Index* indices, T* o
                                      int64 out_size) {
   const int32 slice_size = out_size / indices_size;
   CUDA_1D_KERNEL_LOOP(i, out_size) {
-    Index indices_i = i / slice_size;
-    Index indices_slice_i = i - indices_i * slice_size;
-    Index params_first_index = ldg(indices + indices_i);
+    int indices_i = i / slice_size;
+    int indices_slice_i = i - indices_i * slice_size;
+    int params_first_index = ldg(indices + indices_i);
     if (!(params_first_index >= 0 && params_first_index < first_dim_size)) {
       // Set indices out of range to zero
       // TODO(fpmc): Log an error for transfer back to host.
       out[i] = T(0);
     } else {
-      Index params_i_ = params_first_index * slice_size + indices_slice_i;
-      int params_i = (int) params_i_;
+      int params_i = static_cast<int>(params_first_index * slice_size + indices_slice_i);
       out[i] = ldg(params + params_i);
     }
   }
@@ -58,7 +57,7 @@ struct FloatyGather<GPUDevice, T, Index> {
     const int64 out_size = Tout.size();
     CudaLaunchConfig config = GetCudaLaunchConfig(out_size, d);
     // clang-format off
-    GatherOpKernel<T, Index>
+    FloatyGatherOpKernel<T, Index>
         <<<config.block_count, config.thread_per_block, 0, d.stream()>>>(
             Tparams.data(), Tindices.data(), Tout.data(), first_dim_size,
             indices_size, out_size);
@@ -73,7 +72,7 @@ struct FloatyGather<GPUDevice, T, Index> {
 }  // namespace functor
 
 #define DEFINE_GPU_SPECS_INDEX(T, Index) \
-  template struct functor::Gather<GPUDevice, T, Index>
+  template struct functor::FloatyGather<GPUDevice, T, Index>
 
 #define DEFINE_GPU_SPECS(T)         \
   DEFINE_GPU_SPECS_INDEX(T, float);
