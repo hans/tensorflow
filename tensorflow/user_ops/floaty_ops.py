@@ -44,3 +44,17 @@ def _FloatyGatherGrad(op, grad):
   indices = math_ops.to_int32(array_ops.reshape(op.inputs[1], [-1]))
   return [ops.IndexedSlices(values, indices, dense_shape), None]
 
+
+@tf.RegisterShape("FloatyScatterUpdate")
+def _floaty_scatter_update_shape(op):
+    var_shape = op.inputs[0].get_shape()
+    indices_shape = op.inputs[1].get_shape()
+    unused_updates_shape = op.inputs[2].get_shape().merge_with(
+            indices_shape.concatenate(var_shape[1:]))
+    return [var_shape]
+
+
+@tf.RegisterGradient("FloatyScatterUpdate")
+def _floaty_scatter_update_grad(op, grad):
+    idxs = op.inputs[1]
+    return None, None, floaty_gather(grad, idxs)
