@@ -97,6 +97,14 @@ py_test(
     data = [":floaty_ops_impl.so"],
 )
 
+py_test(
+    name = "floaty_scatter_op_test",
+    size = "small",
+    srcs = ["floaty_scatter_op_test.py"],
+    deps = [":floaty_ops"],
+    data = [":floaty_ops_impl.so"],
+)
+
 
 filegroup(
     name = "all_files",
