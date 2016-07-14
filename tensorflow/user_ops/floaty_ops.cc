@@ -26,7 +26,6 @@ typedef shape_inference::Shape Shape;
 REGISTER_OP("FloatyGather")
     .Input("params: Tparams")
     .Input("indices: Tindices")
-    .Input("grad_container: Tparams")
     .Attr("validate_indices: bool = true")
     .Output("output: Tparams")
     .Attr("Tparams: type")
