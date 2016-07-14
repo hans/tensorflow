@@ -17,8 +17,13 @@ from tensorflow.python.ops import math_ops
 
 _module = tf.load_op_library(os.path.join(tf.resource_loader.get_data_files_path(), "floaty_ops_impl.so"))
 
-floaty_gather = _module.floaty_gather
 floaty_scatter_update = _module.floaty_scatter_update
+
+def floaty_gather(x, indices, grad_container=None):
+    if grad_container is None:
+        # TODO print warning? super inefficient with chained gathers, say
+        grad_container = tf.zeros_like(x)
+    return _module.floaty_gather(x, indices, grad_container)
 
 
 @ops.RegisterShape("FloatyGather")
