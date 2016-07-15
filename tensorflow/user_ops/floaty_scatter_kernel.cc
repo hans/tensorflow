@@ -218,7 +218,7 @@ namespace functor {
   extern template struct FloatyScatterFunctor<GPUDevice, T, Index, op>;
 
 #define DECLARE_GPU_SPECS_INDEX(T, Index)                       \
-  DECLARE_GPU_SPECS_OP(T, Index, scatter_op::UpdateOp::ASSIGN);
+  DECLARE_GPU_SPECS_OP(T, Index, floaty_scatter_kernel::UpdateOp::ASSIGN);
 
 #define DECLARE_GPU_SPECS(T)         \
   DECLARE_GPU_SPECS_INDEX(T, float);
