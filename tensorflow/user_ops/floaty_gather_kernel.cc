@@ -172,15 +172,16 @@ struct FloatyGather<CPUDevice, T, Index> {
 };
 }  // namespace functor
 
-#define REGISTER_GATHER_FULL(dev, type, index_type)                    \
-  REGISTER_KERNEL_BUILDER(Name("FloatyGather")                         \
+#define REGISTER_GATHER_FULL(opname, dev, type, index_type)            \
+  REGISTER_KERNEL_BUILDER(Name(opname)                                 \
                               .Device(DEVICE_##dev)                    \
                               .TypeConstraint<type>("Tparams")         \
                               .TypeConstraint<index_type>("Tindices"), \
                           FloatyGatherOp<dev##Device, type, index_type>)
 
-#define REGISTER_GATHER_ALL_INDICES(dev, type) \
-  REGISTER_GATHER_FULL(dev, type, float);
+#define REGISTER_GATHER_ALL_INDICES(dev, type)                  \
+  REGISTER_GATHER_FULL("FloatyGather", dev, type, float);       \
+  REGISTER_GATHER_FULL("UnsafeFloatyGather", dev, type, float);
 
 #define REGISTER_GATHER_CPU(type) REGISTER_GATHER_ALL_INDICES(CPU, type)
 

@@ -22,7 +22,17 @@ namespace tensorflow {
 typedef shape_inference::InferenceContext InferenceContext;
 typedef shape_inference::Shape Shape;
 
-// --------------------------------------------------------------------------
+OpShapeInferenceFn gather_shape([](InferenceContext* c) {
+    const Shape* params_subshape;
+    TF_RETURN_IF_ERROR(c->Subshape(c->input(0), 1, &params_subshape));
+    const Shape* indices_shape = c->input(1);
+    const Shape* out;
+    TF_RETURN_IF_ERROR(c->Concatenate(indices_shape, params_subshape, &out));
+    c->set_output(0, out);
+    return Status::OK();
+});
+
+
 REGISTER_OP("FloatyGather")
     .Input("params: Tparams")
     .Input("indices: Tindices")
@@ -30,18 +40,31 @@ REGISTER_OP("FloatyGather")
     .Output("output: Tparams")
     .Attr("Tparams: type")
     .Attr("Tindices: {float}")
-    .SetShapeFn(OpShapeInferenceFn([](InferenceContext* c) {
-      const Shape* params_subshape;
-      TF_RETURN_IF_ERROR(c->Subshape(c->input(0), 1, &params_subshape));
-      const Shape* indices_shape = c->input(1);
-      const Shape* out;
-      TF_RETURN_IF_ERROR(c->Concatenate(indices_shape, params_subshape, &out));
-      c->set_output(0, out);
-      return Status::OK();
-    }))
+    .SetShapeFn(gather_shape)
     .Doc(R"doc(
 Gather slices from `params` according to `indices`.
 This is just like Gather except that `indices` may be floats.
+)doc");
+
+
+REGISTER_OP("UnsafeFloatyGather")
+    .Input("params: Tparams")
+    .Input("indices: Tindices")
+    .Input("grad_container: Tparams")
+    .Attr("validate_indices: bool = true")
+    .Output("output: Tparams")
+    .Attr("Tparams: type")
+    .Attr("Tindices: {float}")
+    .SetShapeFn(gather_shape)
+    .Doc(R"doc(
+FloatyGather op specialized for repeated application to a dense matrix.
+
+Exactly like FloatyGather during forward prop.
+During backward prop, gradients are accumulated on a dense `grad` matrix instead
+of being repeatedly generated with `IndexedSlices`.
+
+Implemented as a simple subclass of FloatyGather, since the C++ implementations are
+exactly the same.
 )doc");
 
 
