@@ -191,9 +191,10 @@ inline T2 RequantizeInNewRange(T1 input, float min_input, float max_input,
 }
 
 template <class T1, class T2>
-inline void RequantizeManyInNewRange(T1* input, size_t count, float min_input,
-                                     float max_input, float min_output,
-                                     float max_output, T2* output) {
+inline void RequantizeManyInNewRange(const T1* input, size_t count,
+                                     float min_input, float max_input,
+                                     float min_output, float max_output,
+                                     T2* output) {
   for (size_t index = 0; index < count; ++index) {
     const float input_float =
         QuantizedToFloat<T1>(input[index], min_input, max_input);
@@ -206,7 +207,7 @@ inline void RequantizeManyInNewRange(T1* input, size_t count, float min_input,
 // possible using only fixed-point math for the inner loop.
 template <>
 inline void RequantizeManyInNewRange<qint32, quint8>(
-    qint32* input, size_t count, float min_input, float max_input,
+    const qint32* input, size_t count, float min_input, float max_input,
     float min_output, float max_output, quint8* output) {
   // Initially we calculate all the constants we need once, before we go into
   // the inner loop.  If this is updated, also update the Eigen version.
@@ -215,16 +216,17 @@ inline void RequantizeManyInNewRange<qint32, quint8>(
   const float output_range = max_output - min_output;
   const float recip_output_range =
       output_range == 0.0 ? 0.0 : (255.0 / output_range);
-  const int64 recip_output_range_fp =
-      static_cast<int64>(recip_output_range * (1 << fp_shift));
+  const float input_rezero = (min_input + max_input) / 2.0;
   const int64 range_scale_fp =
       output_range == 0.0 ? 0.0
                           : static_cast<int64>(255.0 * (1 << fp_shift) *
                                                input_range / output_range);
   const int64 input_offset_fp =
-      (min_input * recip_output_range_fp) + (range_scale_fp >> 1);
+      static_cast<int64>(input_rezero * recip_output_range * (1 << fp_shift));
   const int64 output_offset_fp =
-      output_range == 0.0 ? 0.0 : round((min_output * 255.0) / output_range);
+      output_range == 0.0 ? 0 : static_cast<int64>((1 << fp_shift) *
+                                                   (min_output * 255.0) /
+                                                   output_range);
   const int64 rounding_delta = 1 << (fp_shift - 1);
 
   // Inside this loop we just do minimal adds, multiplies, and shifts, in a way
@@ -235,11 +237,9 @@ inline void RequantizeManyInNewRange<qint32, quint8>(
     const int64 input_value = static_cast<int64>(input[index]);
     const int64 fp_value =
         ((input_value * range_scale_fp) >> 32) + input_offset_fp;
-    const int64 round_intermediate =
-        ((fp_value >= 0) ? (fp_value + rounding_delta)
-                         : (fp_value - rounding_delta)) >>
-        fp_shift;
-    int64 quantized_int64 = (round_intermediate - output_offset_fp);
+    const int64 offset_intermediate = fp_value - output_offset_fp;
+    const int64 round_intermediate = offset_intermediate + rounding_delta;
+    int64 quantized_int64 = round_intermediate >> fp_shift;
     quantized_int64 = std::max(quantized_int64, 0LL);
     quantized_int64 = std::min(quantized_int64, 255LL);
     output[index] = static_cast<quint8>(static_cast<int32>(quantized_int64));
@@ -269,15 +269,11 @@ inline void RequantizeManyInNewRangeUsingEigen(
   output->flat<T2>().device(device) = input_requantized;
 }
 
-#if 0
 // See RequantizeManyInNewRange() for a non-eigen reference implementation.
 //
 // Because converting 32-bit accumulated results down to eight bit is a common
 // case, we have a specialized code path to handle it as efficiently as
 // possible using only fixed-point math for the inner loop.
-//
-// See #ifdefed out test in quantization_utils_test.cc
-// (RequantizeManyInNewRange32To8BitUsingEigen).
 template <>
 inline void RequantizeManyInNewRangeUsingEigen<qint32, quint8>(
     const Eigen::ThreadPoolDevice& device, const Tensor& input, float min_input,
@@ -289,14 +285,17 @@ inline void RequantizeManyInNewRangeUsingEigen<qint32, quint8>(
   const float output_range = max_output - min_output;
   const float recip_output_range =
       output_range == 0.0 ? 0.0 : (255.0 / output_range);
-  const int64 recip_output_range_fp =
-      static_cast<int64>(recip_output_range * (1 << fp_shift));
+  const float input_rezero = (min_input + max_input) / 2.0;
   const int64 range_scale_fp =
-      static_cast<int64>(255.0 * (1 << fp_shift) * input_range / output_range);
+      output_range == 0.0 ? 0.0
+                          : static_cast<int64>(255.0 * (1 << fp_shift) *
+                                               input_range / output_range);
   const int64 input_offset_fp =
-      (min_input * recip_output_range_fp) + (range_scale_fp >> 1);
+      static_cast<int64>(input_rezero * recip_output_range * (1 << fp_shift));
   const int64 output_offset_fp =
-      output_range == 0.0 ? 0.0 : round((min_output * 255.0) / output_range);
+      output_range == 0.0 ? 0 : static_cast<int64>((1 << fp_shift) *
+                                                   (min_output * 255.0) /
+                                                   output_range);
   const int64 rounding_delta = 1 << (fp_shift - 1);
 
   // Inside this eigen expression we just do minimal adds, multiplies, and
@@ -305,17 +304,14 @@ inline void RequantizeManyInNewRangeUsingEigen<qint32, quint8>(
   auto input_array = input.flat<qint32>();
   auto fp_value = ((input_array.template cast<int64>() * range_scale_fp)
                        .unaryExpr(int64_right_shift_op<32>())) +
-                  input_offset_fp;
-  auto round_intermediate = (fp_value + rounding_delta * fp_value.sign())
-                                .unaryExpr(int64_right_shift_op<fp_shift>());
-  auto input_requantized = (round_intermediate - output_offset_fp)
-                               .cwiseMax(0LL)
+                  (input_offset_fp - output_offset_fp + rounding_delta);
+  auto intermediate = fp_value.unaryExpr(int64_right_shift_op<fp_shift>());
+  auto input_requantized = intermediate.cwiseMax(0LL)
                                .cwiseMin(255LL)
                                .template cast<int32>()
                                .template cast<quint8>();
   output->flat<quint8>().device(device) = input_requantized;
 }
-#endif
 
 // REQUIRES: 'result->NumElements() == input.NumElements()'
 template <class T>
@@ -353,6 +349,21 @@ Tensor FloatTensorToQuantized(const Tensor& input, float min, float max) {
 
 // REQUIRES: 'result->NumElements() == input.NumElements()'
 template <class T>
+void QuantizedTensorToFloatInPlaceUsingEigen(
+    const Eigen::ThreadPoolDevice& device, const Tensor& input, float min,
+    float max, Tensor* result) {
+  DCHECK_EQ(DataTypeToEnum<T>::v(), input.dtype());
+  auto flat_input = input.flat<T>();
+  auto flat_result = result->flat<float>();
+  const int data_size = flat_input.size();
+  DCHECK(data_size == flat_result.size());
+
+  QuantizedToFloatStruct<T> q2f(min, max);
+  flat_result.device(device) = DEQUANTIZE_WITH_EIGEN(flat_input, q2f);
+}
+
+// REQUIRES: 'result->NumElements() == input.NumElements()'
+template <class T>
 void QuantizedTensorToFloatInPlace(const Tensor& input, float min, float max,
                                    Tensor* result) {
   DCHECK_EQ(DataTypeToEnum<T>::v(), input.dtype());
@@ -370,6 +381,110 @@ Tensor QuantizedTensorToFloat(const Tensor& input, float min, float max) {
   Tensor result(DT_FLOAT, input.shape());
   QuantizedTensorToFloatInPlace<T>(input, min, max, &result);
   return result;
+}
+
+void GetOutputMinAndMaxForQuantizedAdd(float input_min, float input_max,
+                                       float smaller_input_min,
+                                       float smaller_input_max,
+                                       float* output_min, float* output_max);
+
+// Add <input> and <smaller_input>.  If <smaller_input> has fewer elements than
+// <input>, then it is broadcast onto <input>.
+template <typename T1, typename T2, typename T3>
+void QuantizedAddUsingEigen(const Eigen::ThreadPoolDevice& device,
+                            const Tensor& input, float input_min,
+                            float input_max, const Tensor& smaller_input,
+                            float smaller_input_min, float smaller_input_max,
+                            Tensor* output, float* output_min,
+                            float* output_max) {
+  const auto& input_flat = input.flat<T1>();
+  const auto& smaller_input_flat = smaller_input.flat<T2>();
+  auto output_flat = output->flat<T3>();
+
+  GetOutputMinAndMaxForQuantizedAdd(input_min, input_max, smaller_input_min,
+                                    smaller_input_max, output_min, output_max);
+  // To do addition properly, we need to compensate for a possibly unbalanced
+  // zero point in the total representation. The quantized value that
+  // represents the real number zero needs to be subtracted before addition to
+  // make sure that the identity of zero + zero = zero holds.
+  const T3 zero_in_total_space =
+      FloatToQuantized<T3>(0.0f, *output_min, *output_max);
+
+  const int64 input_element_count = input.NumElements();
+  const int64 smaller_input_element_count = smaller_input.NumElements();
+
+  QuantizedToFloatStruct<T1> smaller_input_q2f(smaller_input_min,
+                                               smaller_input_max);
+  QuantizedToFloatStruct<T2> input_q2f(input_min, input_max);
+  FloatToQuantizedStruct<T3> f2q(*output_min, *output_max);
+
+  auto smaller_input_float =
+      DEQUANTIZE_WITH_EIGEN(smaller_input_flat, smaller_input_q2f);
+  auto smaller_input_in_total_space =
+      QUANTIZE_WITH_EIGEN(smaller_input_float, f2q, T3);
+
+  auto input_float = DEQUANTIZE_WITH_EIGEN(input_flat, input_q2f);
+  auto input_in_total_space = QUANTIZE_WITH_EIGEN(input_float, f2q, T3);
+
+  Eigen::array<Eigen::DenseIndex, 1> bcast;
+  bcast[0] = input_element_count / smaller_input_element_count;
+  output_flat.device(device) =
+      input_in_total_space +
+      (smaller_input_in_total_space.broadcast(bcast) + zero_in_total_space);
+}
+
+// This is a reference implementation of the bias addition for quantized
+// buffers, designed to provide a clear specification for the result we
+// want. We'll want to specialize this for particular hardware, and
+// probably even fuse it with matrix multiplications in a lot of cases. It's
+// important to show the clamping behavior we want in particular.
+template <typename T1, typename T2, typename T3>
+void QuantizedAdd(const Eigen::ThreadPoolDevice& device, const Tensor& input,
+                  float input_min, float input_max, const Tensor& smaller_input,
+                  float smaller_input_min, float smaller_input_max,
+                  Tensor* output, float* output_min, float* output_max) {
+  const auto& input_flat = input.flat<T1>();
+  const auto& smaller_input_flat = smaller_input.flat<T2>();
+  auto output_flat = output->flat<T3>();
+
+  GetOutputMinAndMaxForQuantizedAdd(input_min, input_max, smaller_input_min,
+                                    smaller_input_max, output_min, output_max);
+  // To do addition properly, we need to compensate for a possibly unbalanced
+  // zero point in the total representation. The quantized value that
+  // represents the real number zero needs to be subtracted before addition to
+  // make sure that the identity of zero + zero = zero holds.
+  const T3 zero_in_total_space =
+      FloatToQuantized<T3>(0.0f, *output_min, *output_max);
+
+  const int64 input_element_count = input.NumElements();
+  const int64 smaller_input_element_count = smaller_input.NumElements();
+
+  float total_min = *output_min;
+  float total_max = *output_max;
+  const size_t how_many_iterations =
+      (input_element_count / smaller_input_element_count);
+  for (size_t iteration = 0; iteration < how_many_iterations; ++iteration) {
+    const size_t offset = iteration * smaller_input_element_count;
+    for (int c = 0; c < smaller_input_element_count; ++c) {
+      const int index = (offset + c);
+      // The two numbers we're going to add can each be in very different
+      // ranges (e.g. the quantized value '127' may represent very different
+      // real numbers in both) so we need to convert them to a common range
+      // before we sum them.
+      const T1 input_value = input_flat(index);
+      const T3 input_in_total_space = RequantizeInNewRange<T1, T3>(
+          input_value, input_min, input_max, total_min, total_max);
+      const T2 smaller_input_value = smaller_input_flat(c);
+      const T3 smaller_input_in_total_space =
+          RequantizeInNewRange<T2, T3>(smaller_input_value, smaller_input_min,
+                                       smaller_input_max, total_min, total_max);
+      const T3 total_pre = input_in_total_space + smaller_input_in_total_space;
+      // As noted above, we need to compensate for the offset of the actual
+      // zero point in the space we're operating in.
+      const T3 total = total_pre + zero_in_total_space;
+      output_flat(index) = total;
+    }
+  }
 }
 
 }  // namespace tensorflow

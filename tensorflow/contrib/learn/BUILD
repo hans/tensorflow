@@ -452,6 +452,18 @@ py_test(
 )
 
 py_test(
+    name = "svm_test",
+    size = "medium",
+    srcs = ["python/learn/estimators/svm_test.py"],
+    srcs_version = "PY2AND3",
+    deps = [
+        ":learn",
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python:framework_test_lib",
+    ],
+)
+
+py_test(
     name = "grid_search_test",
     size = "small",
     srcs = ["python/learn/tests/grid_search_test.py"],
@@ -613,7 +625,7 @@ py_test(
 py_test(
     name = "graph_io_test",
     size = "small",
-    srcs = ["python/learn/io/graph_io_test.py"],
+    srcs = ["python/learn/learn_io/graph_io_test.py"],
     srcs_version = "PY2AND3",
     tags = ["manual"],  # http://b/29229547
     deps = [
@@ -678,6 +690,26 @@ py_test(
     name = "recoverable_session_test",
     size = "small",
     srcs = ["python/learn/tests/recoverable_session_test.py"],
+    srcs_version = "PY2AND3",
+    deps = [
+        "//tensorflow:tensorflow_py",
+    ],
+)
+
+py_test(
+    name = "supervised_session_test",
+    size = "small",
+    srcs = ["python/learn/tests/supervised_session_test.py"],
+    srcs_version = "PY2AND3",
+    deps = [
+        "//tensorflow:tensorflow_py",
+    ],
+)
+
+py_test(
+    name = "summary_writer_cache_test",
+    size = "small",
+    srcs = ["python/learn/tests/summary_writer_cache_test.py"],
     srcs_version = "PY2AND3",
     deps = [
         "//tensorflow:tensorflow_py",

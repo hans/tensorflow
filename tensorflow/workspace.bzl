@@ -6,8 +6,8 @@
 def tf_workspace(path_prefix = "", tf_repo_name = ""):
   native.new_http_archive(
     name = "eigen_archive",
-    url = "https://bitbucket.org/eigen/eigen/get/334b1d428283.tar.gz",
-    sha256 = "6d5efd02c7c11fbb9d02df4f0b64f22ecbd348e7549f8a83c13fb4d8d9e19d4b",
+    url = "https://bitbucket.org/eigen/eigen/get/b4fa9622b809.tar.gz",
+    sha256 = "2862840c2de9c0473a4ef20f8678949ae89ab25965352ee53329e63ba46cec62",
     build_file = path_prefix + "eigen.BUILD",
   )
 
@@ -54,6 +54,13 @@ def tf_workspace(path_prefix = "", tf_repo_name = ""):
     url = "https://github.com/glennrp/libpng/archive/v1.2.53.zip",
     sha256 = "c35bcc6387495ee6e757507a68ba036d38ad05b415c2553b3debe2a57647a692",
     build_file = path_prefix + "png.BUILD",
+  )
+
+  native.new_http_archive(
+    name = "gif_archive",
+    url = "http://ufpr.dl.sourceforge.net/project/giflib/giflib-5.1.4.tar.gz",
+    sha256 = "34a7377ba834397db019e8eb122e551a49c98f49df75ec3fcc92b9a794a4f6d1",
+    build_file = path_prefix + "gif.BUILD",
   )
 
   native.new_http_archive(
@@ -140,16 +147,10 @@ def tf_workspace(path_prefix = "", tf_repo_name = ""):
     actual = "@jsoncpp_git//:jsoncpp",
   )
 
-  native.new_git_repository(
-    name = "boringssl_git",
-    commit = "e72df93461c6d9d2b5698f10e16d3ab82f5adde3",
-    remote = "https://github.com/google/boringssl.git",
-    build_file = path_prefix + "boringssl.BUILD",
-  )
-
-  native.bind(
-    name = "boringssl_err_data_c",
-    actual = tf_repo_name + "//third_party/boringssl:err_data_c",
+  native.git_repository(
+      name = "boringssl_git",
+      remote = "https://github.com/google/boringssl.git",
+      commit = "bbcaa15b0647816b9a1a9b9e0d209cd6712f0105",  # 2016-07-11
   )
 
   native.new_git_repository(

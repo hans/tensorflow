@@ -645,6 +645,9 @@ class GradLoopState(object):
 
     Returns:
       The stack that contains the accumulated history of the tensor.
+
+    Raises:
+      TypeError: For internal errors involving the value condition context.
     """
     curr_ctxt = ops.get_default_graph()._get_control_flow_context()
     with ops.control_dependencies(None):
@@ -673,7 +676,9 @@ class GradLoopState(object):
         self.forward_index.op._add_control_input(push.op)
       else:
         # value is in a cond context within the forward context.
-        assert isinstance(value_ctxt, CondContext)
+        if not isinstance(value_ctxt, CondContext):
+          raise TypeError(
+              "value_ctxt is not a CondContext: %s" % value_ctxt)
         if dead_branch:
           # The special case for creating a zero tensor for a dead
           # branch of a switch. See ControlFlowState.ZerosLike().
@@ -732,7 +737,8 @@ class GradLoopState(object):
         history_value = _SwitchRefOrTensor(history_value, pred)[branch]
       pop = gen_data_flow_ops._stack_pop(history_value, value.dtype.base_dtype)
       self.grad_context.Exit()
-    if self.grad_context.parallel_iterations > 1:
+    parallel_iterations = self.grad_context.parallel_iterations
+    if parallel_iterations is not None and parallel_iterations > 1:
       # All pops are ordered after pivot_for_body and before grad_sync.
       self.grad_sync._add_control_input(pop.op)
     return pop
@@ -1006,7 +1012,8 @@ class ControlFlowState(object):
           # pylint: enable=protected-access
 
 
-def MaybeCreateControlFlowState(between_op_list, between_ops):
+def MaybeCreateControlFlowState(between_op_list, between_ops,
+                                colocate_gradients_with_ops):
   """Create the state for all the while loops involved in one gradients().
 
   We create a ControlFlowState when there are while loops involved in
@@ -1020,7 +1027,11 @@ def MaybeCreateControlFlowState(between_op_list, between_ops):
     if _IsLoopExit(op):
       if loop_state is None:
         loop_state = ControlFlowState()
-      loop_state.AddWhileContext(op, between_op_list, between_ops)
+      if colocate_gradients_with_ops:
+        with ops.colocate_with(op):
+          loop_state.AddWhileContext(op, between_op_list, between_ops)
+      else:
+        loop_state.AddWhileContext(op, between_op_list, between_ops)
   return loop_state
 
 
@@ -1755,15 +1766,10 @@ class WhileContext(ControlFlowContext):
         if dense_shape is not None:
           self._values.add(dense_shape.name)
 
-  def BuildLoop(self, pred, body, loop_vars):
-    """Add the loop termination condition and body to the graph."""
+  def _BuildLoop(self, pred, body, original_loop_vars, loop_vars):
+    """Core: Add the loop termination condition and body to the graph."""
+    flat_loop_vars = nest.flatten(original_loop_vars)
 
-    # Keep original_loop_vars to identify which are TensorArrays
-    original_loop_vars = loop_vars
-    flat_loop_vars = nest.flatten(loop_vars)
-    # Convert TensorArrays to their flow variables
-    loop_vars = _convert_tensorarrays_to_flows(flat_loop_vars)
-    loop_vars = ops.convert_n_to_tensor_or_indexed_slices(loop_vars)
     # Let the context know the loop variabes so the loop variables
     # would be added in the outer contexts properly.
     self._InitializeValues(loop_vars)
@@ -1837,6 +1843,25 @@ class WhileContext(ControlFlowContext):
     # Exit the loop.
     self.ExitResult(exit_vars)
 
+    return original_body_result, exit_vars
+
+  def BuildLoop(self, pred, body, loop_vars):
+    """Add the loop termination condition and body to the graph."""
+
+    # Keep original_loop_vars to identify which are TensorArrays
+    original_loop_vars = loop_vars
+    flat_loop_vars = nest.flatten(loop_vars)
+    # Convert TensorArrays to their flow variables
+    loop_vars = _convert_tensorarrays_to_flows(flat_loop_vars)
+    loop_vars = ops.convert_n_to_tensor_or_indexed_slices(loop_vars)
+    try:
+      self.Enter()
+      original_body_result, exit_vars = self._BuildLoop(
+          pred, body, original_loop_vars, loop_vars)
+    finally:
+      self.Exit()
+
+    flat_result = nest.flatten(original_body_result)
     # Convert TensorArray flow variables outside the context back into
     # their associated TensorArrays for returning to caller.
     exit_vars_with_tensor_arrays = (
@@ -1902,7 +1927,8 @@ def while_loop(cond, body, loop_vars, parallel_iterations=10, back_prop=True,
   Args:
     cond: A callable that represents the termination condition of the loop.
     body: A callable that represents the loop body.
-    loop_vars: A (possibly nested) tuple or list of variable input tensors.
+    loop_vars: A (possibly nested) tuple or list of numpy array, `Tensor`,
+      and `TensorArray` objects.
     parallel_iterations: The number of iterations allowed to run in parallel.
     back_prop: Whether backprop is enabled for this while loop.
     swap_memory: Whether GPU-CPU memory swap is enabled for this loop.
@@ -1942,9 +1968,7 @@ def while_loop(cond, body, loop_vars, parallel_iterations=10, back_prop=True,
       raise TypeError("body must be callable.")
 
     context = WhileContext(parallel_iterations, back_prop, swap_memory, name)
-    context.Enter()
     result = context.BuildLoop(cond, body, loop_vars)
-    context.Exit()
     return result
 
 

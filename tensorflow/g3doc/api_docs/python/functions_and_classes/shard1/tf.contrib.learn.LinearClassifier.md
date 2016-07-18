@@ -29,7 +29,7 @@ estimator = LinearClassifier(
 # Or estimator using the SDCAOptimizer.
 estimator = LinearClassifier(
    feature_columns=[occupation, education_x_occupation],
-   optimizer=tf.contrib.learn.SDCAOptimizer(
+   optimizer=tf.contrib.linear_optimizer.SDCAOptimizer(
      example_id_column='example_id',
      symmetric_l2_regularization=2.0
    ))
@@ -52,6 +52,9 @@ Input of `fit` and `evaluate` should have following features,
 * for each `column` in `feature_columns`:
   - if `column` is a `SparseColumn`, a feature with `key=column.name`
     whose `value` is a `SparseTensor`.
+  - if `column` is a `WeightedSparseColumn`, two features: the first with
+    `key` the id column name, the second with `key` the weight column name.
+    Both features' `value` must be a `SparseTensor`.
   - if `column` is a `RealValuedColumn`, a feature with `key=column.name`
     whose `value` is a `Tensor`.
   - if `feature_columns` is `None`, then `input` must contains only real

@@ -56,6 +56,20 @@ class Shape {
   TF_DISALLOW_COPY_AND_ASSIGN(Shape);
 };
 
+// Struct used to allow functions to take const Dimension* or a dimension value.
+// Not meant to be constructed directly.
+struct DimensionOrConstant {
+ public:
+  // Intentionally not explicit.
+  DimensionOrConstant(const Dimension* dim) : dim(dim) {}
+
+  // val must be non-negative or InferenceContext::kUnknownDim.
+  DimensionOrConstant(int64 val) : val(val) {}
+
+  const Dimension* dim = nullptr;
+  int64 val = 0;
+};
+
 // Note: This is experimental support for op shape inference in C++.  Shape
 // inference functions are not ready to be implemented yet.
 //
@@ -84,8 +98,8 @@ class InferenceContext {
   // <input_tensors> is NULL-padded to be the same size as <input_shapes>.
   //
   // REQUIRES: <node_def> is not NULL, and must outlive the InferenceContext.
-  InferenceContext(const NodeDef* node_def,
-                   const std::vector<string>& input_shapes, int num_outputs,
+  InferenceContext(const NodeDef* node_def, const OpDef& op_def,
+                   const std::vector<string>& input_shapes,
                    const std::vector<const Tensor*>& input_tensors);
   ~InferenceContext();
 
@@ -101,7 +115,16 @@ class InferenceContext {
   const Shape* output(int idx) { return outputs_[idx]; }
 
   // idx can be negative for an offset from end of dimensions.
-  const Dimension* Dim(const Shape* s, int32 idx) { return s->dims_[idx]; }
+  // idx must be in the range [-1 * s.rank, s.rank).
+  const Dimension* Dim(const Shape* s, int32 idx) {
+    if (s->rank_ == kUnknownRank) {
+      return UnknownDim();
+    }
+    if (idx < 0) {
+      return s->dims_[s->dims_.size() + idx];
+    }
+    return s->dims_[idx];
+  }
   int32 Rank(const Shape* s) { return s->rank_; }
   bool RankKnown(const Shape* s) { return Rank(s) != kUnknownRank; }
   int64 Value(const Dimension* d) { return d->value_; }
@@ -150,10 +173,18 @@ class InferenceContext {
   Status Merge(const Dimension* d0, const Dimension* d1,
                const Dimension** out) TF_MUST_USE_RESULT;
 
-  // Returns in <*out> a sub-shape of <s>, with dimensions at index [s[start],
-  // ..).
+  // Returns in <*out> a sub-shape of <s> with dimensions [start:].
+  // <start> can be negative to index from the end of the shape. If <start> >
+  // rank of <s>, then an empty subshape is returned.
   // Returns an error if the rank of <s> is < <start>.
   Status Subshape(const Shape* s, int64 start,
+                  const Shape** out) TF_MUST_USE_RESULT;
+
+  // Returns in <*out> a sub-shape of <s>, with dimensions [start:end].
+  // <start> and <end> can be negative, to index from the end of the shape.
+  // <start> and <end> are set to the rank of <s> if > rank of <s>.
+  // Returns an error if the rank of <s> is insufficient.
+  Status Subshape(const Shape* s, int64 start, int64 end,
                   const Shape** out) TF_MUST_USE_RESULT;
 
   // Returns in <*out> the result of appending the dimensions of <s2> to those
@@ -163,18 +194,38 @@ class InferenceContext {
 
   // Returns a new shape with the given dims. The returned value is owned by
   // this context.
-  const Shape* CreateShape(const std::vector<const Dimension*>& dims);
-  const Shape* CreateUnknownShape();
+  const Shape* MakeShape(const std::vector<const Dimension*>& dims);
+
+  // Returns a new unknown shape.
+  const Shape* UnknownShape();
+
+  // Returns a new shape of zero dimensions.
+  const Shape* Scalar();
+
+  // Returns a new shape of one dimension.
+  const Shape* Vector(DimensionOrConstant dim);
+
+  // Returns a new shape of two dimensions.
+  const Shape* Matrix(DimensionOrConstant dim1, DimensionOrConstant dim2);
 
   // Returns in <out> a new shape whose dimension sizes come from input tensor
   // <input_idx>. The tensor must be a 1-dimensional int32 or int64 tensor.  If
   // the input tensor is NULL, then an unknown shape is returned.
-  Status CreateShapeFromShapeTensor(int input_idx, const Shape** out);
+  Status MakeShapeFromShapeTensor(int input_idx, const Shape** out);
+
+  // Returns in <out> a new shape corresponding to <proto>.
+  Status MakeShapeFromShapeProto(const TensorShapeProto& proto,
+                                 const Shape** out);
 
   // Returns a new dimension of the given size.  The returned value is owned by
   // this context.
-  const Dimension* CreateDim(int64 value);
-  const Dimension* CreateUnknownDim();
+  const Dimension* MakeDim(int64 value);
+  const Dimension* UnknownDim();
+
+  // Returns a new dimension whose value is given by a scalar input tensor.
+  // The input tensor must be in host memory, since it is dereferenced to get
+  // the value.
+  Status MakeDimForScalarInput(int idx, const Dimension** out);
 
   // Look up the attr for the NodeDef being evaluated with name attr_name and
   // set *value to its value.  If no attr with attr_name is found in def(), or
@@ -182,14 +233,24 @@ class InferenceContext {
   template <class T>
   Status GetAttr(StringPiece attr_name, T* value) const;
 
+  // Returns in <out> the result of dividing <dividend> by <divisor>.
+  // Returns an error if <divisor> does not evenly divide <dividend>.
+  Status Divide(const Dimension* dividend, int64 divisor,
+                const Dimension** out);
+
+  // Returns in <out> the sum of <first> and <second>.
+  Status Add(const Dimension* first, int64 second, const Dimension** out);
+
  private:
+  const Dimension* GetDimension(const DimensionOrConstant& d);
+
   Status ReturnUnknownShape(const Shape** out) {
-    *out = CreateUnknownShape();
+    *out = UnknownShape();
     return Status::OK();
   }
   Status ReturnCreatedShape(const std::vector<const Dimension*>& dims,
                             const Shape** out) {
-    *out = CreateShape(dims);
+    *out = MakeShape(dims);
     return Status::OK();
   }
 
@@ -202,6 +263,8 @@ class InferenceContext {
   std::vector<const Shape*> outputs_;
 
   const NodeDef& node_def_;
+  NameRangeMap input_name_map_;
+  NameRangeMap output_name_map_;
 
   TF_DISALLOW_COPY_AND_ASSIGN(InferenceContext);
 };

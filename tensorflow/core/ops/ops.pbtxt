@@ -2176,6 +2176,30 @@ op {
   description: "(conjugate transposes).\n\nThe input is a tensor of shape `[..., M, M]` whose inner-most 2 dimensions\nform square matrices. The output is a tensor of the same shape as the input\ncontaining the inverse for all input submatrices `[..., :, :]`.\n\nThe op uses LU decomposition with partial pivoting to compute the inverses.\n\nIf a matrix is not invertible there is no guarantee what the op does. It\nmay detect the condition and raise an exception or it may simply return a\ngarbage result."
 }
 op {
+  name: "BatchMatrixSetDiag"
+  input_arg {
+    name: "input"
+    description: "Rank `k+1`, where `k >= 1`."
+    type_attr: "T"
+  }
+  input_arg {
+    name: "diagonal"
+    description: "Rank `k`, where `k >= 1`."
+    type_attr: "T"
+  }
+  output_arg {
+    name: "output"
+    description: "Rank `k+1`, with `output.shape = input.shape`."
+    type_attr: "T"
+  }
+  attr {
+    name: "T"
+    type: "type"
+  }
+  summary: "Returns a batched matrix tensor with new batched diagonal values."
+  description: "Given `input` and `diagonal`, this operation returns a tensor with the\nsame shape and values as `input`, except for the diagonals of the innermost\nmatrices.  These will be overwritten by the values in `diagonal`.\nThe batched matrices must be square.\n\nThe output is computed as follows:\n\nAssume `input` has `k+1` dimensions `[I, J, K, ..., N, N]` and `diagonal` has\n`k` dimensions `[I, J, K, ..., N]`.  Then the output is a\ntensor of rank `k+1` with dimensions [I, J, K, ..., N, N]` where:\n\n  * `output[i, j, k, ..., m, n] = diagonal[i, j, k, ..., n]` for `m == n`.\n  * `output[i, j, k, ..., m, n] = input[i, j, k, ..., m, n]` for `m != n`."
+}
+op {
   name: "BatchMatrixSolve"
   input_arg {
     name: "matrix"
@@ -3792,6 +3816,60 @@ op {
   summary: "Computes the gradients of 3-D convolution with respect to the input."
 }
 op {
+  name: "Copy"
+  input_arg {
+    name: "input"
+    description: "Input tensor."
+    type_attr: "T"
+  }
+  output_arg {
+    name: "output"
+    description: "Output tensor, deep-copied from input."
+    type_attr: "T"
+  }
+  attr {
+    name: "T"
+    type: "type"
+  }
+  attr {
+    name: "tensor_name"
+    type: "string"
+    default_value {
+      s: ""
+    }
+    description: "The name of the input tensor."
+  }
+  summary: "Copy Op."
+  description: "Performs CPU-to-CPU or GPU-to-GPU deep-copying of tensor, depending on the\ndevice on which the tensor is allocated.\n\nUnlike the CopyHost Op, this op does not have HostMemory constraint on its\ninput or output."
+}
+op {
+  name: "CopyHost"
+  input_arg {
+    name: "input"
+    description: "Input tensor."
+    type_attr: "T"
+  }
+  output_arg {
+    name: "output"
+    description: "Output tensor, deep-copied from input."
+    type_attr: "T"
+  }
+  attr {
+    name: "T"
+    type: "type"
+  }
+  attr {
+    name: "tensor_name"
+    type: "string"
+    default_value {
+      s: ""
+    }
+    description: "The name of the input tensor."
+  }
+  summary: "Copy Host Op."
+  description: "Performs CPU-to-CPU deep-copying of tensor.\n\nUnlike the Copy Op, this op has HostMemory constraint on its input or output."
+}
+op {
   name: "Cos"
   input_arg {
     name: "x"
@@ -4063,6 +4141,60 @@ op {
   description: "`a` and `b` must be the same shape; they can either be simple 3-element vectors,\nor any shape where the innermost dimension is 3. In the latter case, each pair\nof corresponding 3-element vectors is cross-multiplied independently."
 }
 op {
+  name: "DebugIdentity"
+  input_arg {
+    name: "input"
+    description: "Input tensor, non-Reference type."
+    type_attr: "T"
+  }
+  output_arg {
+    name: "output"
+    description: "Output tensor that equals the input tensor."
+    type_attr: "T"
+  }
+  attr {
+    name: "T"
+    type: "type"
+  }
+  attr {
+    name: "tensor_name"
+    type: "string"
+    default_value {
+      s: ""
+    }
+    description: "Name of the input tensor."
+  }
+  summary: "Debug Identity Op."
+  description: "Provides an identity mapping of the non-Ref type input tensor for debugging."
+}
+op {
+  name: "DebugNanCount"
+  input_arg {
+    name: "input"
+    description: "Input tensor, non-Reference type."
+    type_attr: "T"
+  }
+  output_arg {
+    name: "output"
+    description: "An integer output tensor that is the number of NaNs in the input."
+    type: DT_INT64
+  }
+  attr {
+    name: "T"
+    type: "type"
+  }
+  attr {
+    name: "tensor_name"
+    type: "string"
+    default_value {
+      s: ""
+    }
+    description: "Name of the input tensor."
+  }
+  summary: "Debug NaN Value Counter Op"
+  description: "Counts number of NaNs in the input tensor, for debugging."
+}
+op {
   name: "DecodeCSV"
   input_arg {
     name: "records"
@@ -4209,6 +4341,42 @@ op {
   }
   summary: "Decode a PNG-encoded image to a uint8 or uint16 tensor."
   description: "The attr `channels` indicates the desired number of color channels for the\ndecoded image.\n\nAccepted values are:\n\n*   0: Use the number of channels in the PNG-encoded image.\n*   1: output a grayscale image.\n*   3: output an RGB image.\n*   4: output an RGBA image.\n\nIf needed, the PNG-encoded image is transformed to match the requested number\nof color channels."
+}
+op {
+  name: "DecodeGif"
+  input_arg {
+    name: "contents"
+    description: "0-D.  The GIF-encoded image."
+    type: DT_STRING
+  }
+  output_arg {
+    name: "image"
+    description: "3-D with shape `[height, width, channels]`."
+    type_attr: "dtype"
+  }
+  attr {
+    name: "channels"
+    type: "int"
+    default_value {
+      i: 0
+    }
+    description: "Number of color channels for the decoded image."
+  }
+  attr {
+    name: "dtype"
+    type: "type"
+    default_value {
+      type: DT_UINT8
+    }
+    allowed_values {
+      list {
+        type: DT_UINT8
+        type: DT_UINT16
+      }
+    }
+  }
+  summary: "Decode a GIF-encoded image to a uint8 or uint16 tensor."
+  description: "The attr `channels` indicates the desired number of color channels for the\ndecoded image.\n\nAccepted values are:\n\n*   0: Use the number of channels in the GIF-encoded image.\n*   1: output a grayscale image.\n*   3: output an RGB image.\n*   4: output an RGBA image.\n\nIf needed, the GIF-encoded image is transformed to match the requested number\nof color channels."
 }
 op {
   name: "DecodeRaw"
@@ -8465,6 +8633,39 @@ op {
   summary: "Does nothing. Only useful as a placeholder for control edges."
 }
 op {
+  name: "NonMaxSuppression"
+  input_arg {
+    name: "boxes"
+    description: "A 2-D float tensor of shape `[num_boxes, 4]`."
+    type: DT_FLOAT
+  }
+  input_arg {
+    name: "scores"
+    description: "A 1-D float tensor of shape `[num_boxes]` representing a single\nscore corresponding to each box (each row of boxes)."
+    type: DT_FLOAT
+  }
+  input_arg {
+    name: "max_output_size"
+    description: "A scalar integer tensor representing the maximum number of\nboxes to be selected by non max suppression."
+    type: DT_INT32
+  }
+  output_arg {
+    name: "selected_indices"
+    description: "A 1-D integer tensor of shape `[M]` representing the selected\nindices from the boxes tensor, where `M <= max_output_size`."
+    type: DT_INT32
+  }
+  attr {
+    name: "iou_threshold"
+    type: "float"
+    default_value {
+      f: 0.5
+    }
+    description: "A float representing the threshold for deciding whether boxes\noverlap too much with respect to IOU."
+  }
+  summary: "Greedily selects a subset of bounding boxes in descending order of score,"
+  description: "pruning away boxes that have high intersection-over-union (IOU) overlap\nwith previously selected boxes.  Bounding boxes are supplied as\n[y1, x1, y2, x2], where (y1, x1) and (y2, x2) are the coordinates of any\ndiagonal pair of box corners and the coordinates can be provided as normalized\n(i.e., lying in the interval [0, 1]) or absolute.  Note that this algorithm\nis agnostic to where the origin is in the coordinate system.  Note that this\nalgorithm is invariant to orthogonal transformations and translations\nof the coordinate system; thus translating or reflections of the coordinate\nsystem result in the same boxes being selected by the algorithm.\n\nThe output of this operation is a set of integers indexing into the input\ncollection of bounding boxes representing the selected boxes.  The bounding\nbox coordinates corresponding to the selected indices can then be obtained\nusing the tf.gather operation.  For example:\n\n  selected_indices = tf.image.non_max_suppression(\n      boxes, scores, max_output_size, iou_threshold)\n  selected_boxes = tf.gather(boxes, selected_indices)"
+}
+op {
   name: "NotEqual"
   input_arg {
     name: "x"
@@ -8665,6 +8866,80 @@ op {
   }
   summary: "A queue that produces elements in first-in first-out order."
   description: "Variable-size shapes are allowed by setting the corresponding shape dimensions\nto 0 in the shape attr.  In this case DequeueMany will pad up to the maximum\nsize of any given element in the minibatch.  See below for details."
+  is_stateful: true
+}
+op {
+  name: "ParameterizedTruncatedNormal"
+  input_arg {
+    name: "shape"
+    description: "The shape of the output tensor. Batches are indexed by the 0th dimension."
+    type_attr: "T"
+  }
+  input_arg {
+    name: "means"
+    description: "The mean parameter of each batch."
+    type_attr: "dtype"
+  }
+  input_arg {
+    name: "stdevs"
+    description: "The standard deviation parameter of each batch. Must be greater than 0."
+    type_attr: "dtype"
+  }
+  input_arg {
+    name: "minvals"
+    description: "The minimum cutoff. May be -infinity."
+    type_attr: "dtype"
+  }
+  input_arg {
+    name: "maxvals"
+    description: "The maximum cutoff. May be +infinity, and must be more than the minval\nfor each batch."
+    type_attr: "dtype"
+  }
+  output_arg {
+    name: "output"
+    description: "A matrix of shape num_batches x samples_per_batch, filled with random\ntruncated normal values using the parameters for each row."
+    type_attr: "dtype"
+  }
+  attr {
+    name: "seed"
+    type: "int"
+    default_value {
+      i: 0
+    }
+    description: "If either `seed` or `seed2` are set to be non-zero, the random number\ngenerator is seeded by the given seed.  Otherwise, it is seeded by a\nrandom seed."
+  }
+  attr {
+    name: "seed2"
+    type: "int"
+    default_value {
+      i: 0
+    }
+    description: "A second seed to avoid seed collision."
+  }
+  attr {
+    name: "dtype"
+    type: "type"
+    description: "The type of the output."
+    allowed_values {
+      list {
+        type: DT_HALF
+        type: DT_FLOAT
+        type: DT_DOUBLE
+      }
+    }
+  }
+  attr {
+    name: "T"
+    type: "type"
+    allowed_values {
+      list {
+        type: DT_INT32
+        type: DT_INT64
+      }
+    }
+  }
+  summary: "Outputs random values from a normal distribution. The parameters may each be a"
+  description: "scalar which applies to the entire output, or a vector of length shape[0] which\nstores the parameters for each batch."
   is_stateful: true
 }
 op {
@@ -14346,11 +14621,12 @@ op {
     description: "analogous to `begin_mask`"
   }
   attr {
-    name: "ellipse_mask"
+    name: "ellipsis_mask"
     type: "int"
     default_value {
       i: 0
     }
+    description: "a bitmask where bit `i` being 1 means the `i`th\nposition is actually an ellipsis. One bit at most can be 1."
   }
   attr {
     name: "new_axis_mask"
@@ -14358,6 +14634,7 @@ op {
     default_value {
       i: 0
     }
+    description: "a bitmask where bit `i` being 1 means the `i`th\nposition creates a dimension in the tensor of length 1. Thus\nthe total number of elements remain unchanged but the shape\ngets a 1 in the appropriate position."
   }
   attr {
     name: "shrink_axis_mask"
@@ -14365,6 +14642,7 @@ op {
     default_value {
       i: 0
     }
+    description: "a bitmask where bit `i` implies that the `i`th\nposition should shrink the dimensionality. begin and end\nmust imply a slice of size 1 in the dimension. For example in\npython one might do `foo[:,3,:]` which would result in\n`shrink_axis_mask` being 2."
   }
   summary: "Return a strided slice from `input`."
   description: "The output tensor is a tensor with dimensions implied by `begin`,\n`end`, and `strides`, whose values are extracted from `begin`.\n\nSpecifically, the result tensor at index `(i[0], i[1], ..., i[n-1])`\nwill obtain the value `input[begin[0] + i[0] * stride[0], ..., `\n                            `begin[n-1] + i[n-1] * stride[n-1])]`.\n\n*Requirements*:\n  `0 != strides[i] for i in [0, n)`"
@@ -14424,7 +14702,7 @@ op {
     }
   }
   attr {
-    name: "ellipse_mask"
+    name: "ellipsis_mask"
     type: "int"
     default_value {
       i: 0
@@ -15662,7 +15940,7 @@ op {
   }
   input_arg {
     name: "segment_ids"
-    description: "A 1-D tensor whose rank is equal to the rank of `data`\'s\nfirst dimension."
+    description: "A tensor whose shape is a prefix of `data.shape`."
     type_attr: "Tindices"
   }
   input_arg {
@@ -15671,7 +15949,7 @@ op {
   }
   output_arg {
     name: "output"
-    description: "Has same shape as data, except for dimension 0 which\nhas size `num_segments`."
+    description: "Has same shape as data, except for the first `segment_ids.rank`\ndimensions, which are replaced with a single dimension which has size\n`num_segments`."
     type_attr: "T"
   }
   attr {
@@ -15707,7 +15985,7 @@ op {
     }
   }
   summary: "Computes the sum along segments of a tensor."
-  description: "Read [the section on\nSegmentation](../../api_docs/python/math_ops.md#segmentation) for an explanation\nof segments.\n\nComputes a tensor such that\n\\\\(output_i = \\sum_j data_j\\\\) where sum is over `j` such\nthat `segment_ids[j] == i`. Unlike `SegmentSum`, `segment_ids`\nneed not be sorted and need not cover all values in the full\n  range of valid values.\n\nIf the sum is empty for a given segment ID `i`, `output[i] = 0`.\n\n`num_segments` should equal the number of distinct segment IDs.\n\n<div style=\"width:70%; margin:auto; margin-bottom:10px; margin-top:20px;\">\n<img style=\"width:100%\" src=\"../../images/UnsortedSegmentSum.png\" alt>\n</div>"
+  description: "Read [the section on\nSegmentation](../../api_docs/python/math_ops.md#segmentation) for an explanation\nof segments.\n\nComputes a tensor such that\n`(output[i] = sum_{j...} data[j...]` where the sum is over tuples `j...` such\nthat `segment_ids[j...] == i`.  Unlike `SegmentSum`, `segment_ids`\nneed not be sorted and need not cover all values in the full\nrange of valid values.\n\nIf the sum is empty for a given segment ID `i`, `output[i] = 0`.\n\n`num_segments` should equal the number of distinct segment IDs.\n\n<div style=\"width:70%; margin:auto; margin-bottom:10px; margin-top:20px;\">\n<img style=\"width:100%\" src=\"../../images/UnsortedSegmentSum.png\" alt>\n</div>"
 }
 op {
   name: "Variable"

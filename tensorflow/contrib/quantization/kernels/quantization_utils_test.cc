@@ -25,12 +25,56 @@ limitations under the License.
 #include "tensorflow/core/framework/types.h"
 #include "tensorflow/core/lib/core/threadpool.h"
 #include "tensorflow/core/lib/random/simple_philox.h"
+#include "tensorflow/core/lib/strings/strcat.h"
 #include "tensorflow/core/platform/test.h"
 
 namespace tensorflow {
 
 class QuantizationUtilsTest : public ::testing::Test {
  protected:
+  void TestRequantizeMany(Eigen::ThreadPoolDevice* eigen_device,
+                          float input_min, float input_max, float output_min,
+                          float output_max,
+                          const std::vector<qint32>& values_quantized,
+                          int tolerance = 1) {
+    const int values_count = values_quantized.size();
+    std::vector<quint8> expected_values;
+    for (int value_index = 0; value_index < values_count; ++value_index) {
+      expected_values.push_back(FloatToQuantized<quint8>(
+          QuantizedToFloat(values_quantized[value_index], input_min, input_max),
+          output_min, output_max));
+    }
+
+    Tensor i_tensor =
+        tensorflow::test::AsTensor(gtl::ArraySlice<qint32>(values_quantized));
+    Tensor o_tensor(DT_QUINT8, TensorShape{values_count});
+    auto output_values = o_tensor.flat<quint8>();
+
+    if (eigen_device == nullptr) {
+      auto input_array = i_tensor.flat<qint32>();
+      RequantizeManyInNewRange(input_array.data(), input_array.size(),
+                               input_min, input_max, output_min, output_max,
+                               output_values.data());
+    } else {
+      RequantizeManyInNewRangeUsingEigen<qint32, quint8>(
+          *eigen_device, i_tensor, input_min, input_max, output_min, output_max,
+          &o_tensor);
+    }
+
+    const string tolerance_str = strings::StrCat("+-", tolerance);
+    for (size_t value_index = 0; value_index < values_count; ++value_index) {
+      int e = expected_values[value_index];
+      int v = output_values(value_index);
+      ASSERT_TRUE(std::abs(e - v) <= tolerance)
+          << "actual=" << v << ", expected=" << e << tolerance_str
+          << ", values_quantized[" << value_index
+          << "]=" << values_quantized[value_index]
+          << ", input_min=" << input_min << ", input_max=" << input_max
+          << ", output_min=" << output_min << ", output_max=" << output_max
+          << ", value_index=" << value_index;
+    }
+  }
+
   // If eigen_device is NULL, then the reference implementation is tested.
   void TestRequantizeManyInNewRange32To8Bit(
       Eigen::ThreadPoolDevice* eigen_device) {
@@ -48,51 +92,47 @@ class QuantizationUtilsTest : public ::testing::Test {
         {3.0f, 3.0f, 0.0f, 255.0f},      // input min == max
         {0.0f, 255.0f, 5.0f, 5.0f},      // output min == max
     };
-    for (size_t range_index = 0; range_index < ranges_count; ++range_index) {
-      const float input_min = ranges[range_index][0];
-      const float input_max = ranges[range_index][1];
-      const float output_min = ranges[range_index][2];
-      const float output_max = ranges[range_index][3];
+    for (int i = 0; i < ranges_count; ++i) {
+      const auto& r = ranges[i];
       std::vector<qint32> values_quantized;
-      std::vector<quint8> expected_values;
-      for (size_t value_index = 0; value_index < values_count; ++value_index) {
-        const float value_float = values[value_index];
-        values_quantized.push_back(
-            FloatToQuantized<qint32>(value_float, input_min, input_max));
-        expected_values.push_back(FloatToQuantized<quint8>(
-            QuantizedToFloat(values_quantized[value_index], input_min,
-                             input_max),
-            output_min, output_max));
+      for (int value_index = 0; value_index < values_count; ++value_index) {
+        const float v = values[value_index];
+        values_quantized.push_back(FloatToQuantized<qint32>(v, r[0], r[1]));
       }
-
-      Tensor i_tensor =
-          tensorflow::test::AsTensor(gtl::ArraySlice<qint32>(values_quantized));
-      Tensor o_tensor(DT_QUINT8, TensorShape{values_count});
-      auto output_values = o_tensor.flat<quint8>();
-
-      if (eigen_device == nullptr) {
-        auto input_array = i_tensor.flat<qint32>();
-        RequantizeManyInNewRange(input_array.data(), input_array.size(),
-                                 input_min, input_max, output_min, output_max,
-                                 output_values.data());
-      } else {
-        RequantizeManyInNewRangeUsingEigen<qint32, quint8>(
-            *eigen_device, i_tensor, input_min, input_max, output_min,
-            output_max, &o_tensor);
-      }
-
-      for (size_t value_index = 0; value_index < values_count; ++value_index) {
-        // Here we convert the quantized input value to what we expect
-        // to get in the output range.
-        ASSERT_EQ(expected_values[value_index], output_values(value_index))
-            << "values_quantized[" << value_index
-            << "]=" << values_quantized[value_index] << ", values["
-            << value_index << "]=" << values[value_index]
-            << ", input_min=" << input_min << ", input_max=" << input_max
-            << ", output_min=" << output_min << ", output_max=" << output_max
-            << ", value_index=" << value_index;
-      }
+      TestRequantizeMany(eigen_device, r[0], r[1], r[2], r[3],
+                         values_quantized);
     }
+
+    // Test with many different values in the input quantized range.
+    qint32 low = Eigen::NumTraits<qint32>::lowest();
+    qint32 high = Eigen::NumTraits<qint32>::highest();
+    std::vector<qint32> vals{low, high};
+    int num_steps = 14419;
+    qint32 step = static_cast<int32>((1L << 32) / num_steps);
+    qint32 v = low + static_cast<qint32>(1);
+    for (int i = 0; i < num_steps; ++i) {
+      vals.push_back(v);
+      v += step;
+    }
+    TestRequantizeMany(eigen_device, -1.0f, 1.0f, -1.0f, 1.0f, vals);
+    TestRequantizeMany(eigen_device, -255.0f, 255.0f, -255.0f, 255.0f, vals);
+    TestRequantizeMany(eigen_device, -1.0f, 1.0f, -12345678.0f, 12345678.0f,
+                       vals);
+    TestRequantizeMany(eigen_device, -1.0f, 12345678.0f, -12345678.0f,
+                       12345678.0f, vals);
+
+    // Test when the input range is large and output range is small.
+    // Use all quantized values where the float is in the output range.
+    const float out_min = -29.1234;
+    const float out_max = 23.1234;
+    const float in_min = -1e6;
+    const float in_max = 1e6;
+
+    low = FloatToQuantized<qint32>(out_min, in_min, in_max);
+    high = FloatToQuantized<qint32>(out_max, in_min, in_max);
+    vals.clear();
+    for (int32 i = low; i <= high; ++i) vals.push_back(i);
+    TestRequantizeMany(eigen_device, in_min, in_max, out_min, out_max, vals);
   }
 
   template <typename InputType, typename OutputType>
@@ -202,6 +242,53 @@ class QuantizationUtilsTest : public ::testing::Test {
             << "expected=" << expected << " actual=" << actual
             << " tolerance=" << tolerance << " v=" << input_array(i)
             << " i=" << i << " f_min=" << f_min << " f_max=" << f_max
+            << " type=" << DataTypeString(DataTypeToEnum<T>::v());
+      }
+    }
+  }
+
+  template <typename T>
+  void TestQuantizedToFloatInPlaceUsingEigen(
+      Eigen::ThreadPoolDevice* eigen_device) {
+    // These are the float values we're going to test the conversions on.
+    typedef std::pair<float, float> FPair;
+    for (FPair min_and_max : std::vector<FPair>{FPair(-255.0f, 255.0f),  //
+                                                FPair(-1.0f, 1.0f),      //
+                                                FPair(-1.0f, 255.0f),    //
+                                                FPair(0.0f, 1e6),        //
+                                                FPair(0.0f, 1.0f),       //
+                                                FPair(-31.0f, 13.0f)}) {
+      const float f_min = min_and_max.first;
+      const float f_max = min_and_max.second;
+      const int values_count = sizeof(T) == 1 ? 256 : 50000;
+      Tensor input(DataTypeToEnum<T>::v(), TensorShape{values_count});
+      auto input_array = input.flat<T>();
+      const double q_range =
+          static_cast<double>(Eigen::NumTraits<T>::highest()) -
+          Eigen::NumTraits<T>::lowest();
+      for (int i = 0; i < values_count; ++i) {
+        if (sizeof(T) == 1) {
+          input_array(i) = Eigen::NumTraits<T>::lowest() + i;
+        } else {
+          int64 offset = static_cast<int64>(q_range / values_count * i);
+          input_array(i) = static_cast<int32>(
+              Eigen::NumTraits<T>::lowest() +
+              std::min<int64>(Eigen::NumTraits<T>::highest(), offset));
+        }
+      }
+
+      Tensor output(DT_FLOAT, TensorShape{values_count});
+      QuantizedTensorToFloatInPlaceUsingEigen<T>(*eigen_device, input, f_min,
+                                                 f_max, &output);
+      auto output_array = output.flat<float>();
+      const double range = static_cast<double>(f_max) - f_min;
+      for (int i = 0; i < values_count; ++i) {
+        float expected = QuantizedToFloat<T>(input_array(i), f_min, f_max);
+        float actual = output_array(i);
+        ASSERT_NEAR(expected, actual, range * 1e-6)
+            << "expected=" << expected << " actual=" << actual
+            << " v=" << input_array(i) << " i=" << i << " f_min=" << f_min
+            << " f_max=" << f_max
             << " type=" << DataTypeString(DataTypeToEnum<T>::v());
       }
     }
@@ -363,14 +450,12 @@ TEST_F(QuantizationUtilsTest, RequantizeManyInNewRange32To8Bit) {
   TestRequantizeManyInNewRange32To8Bit(nullptr /* eigen_device */);
 }
 
-#if 0
 TEST_F(QuantizationUtilsTest, RequantizeManyInNewRange32To8BitUsingEigen) {
   thread::ThreadPool threadpool(Env::Default(), "test", 2 /* num_threads */);
   EigenThreadPoolWrapper wrapper(&threadpool);
   Eigen::ThreadPoolDevice eigen_device(&wrapper, 2 /* num_threads */);
   TestRequantizeManyInNewRange32To8Bit(&eigen_device);
 }
-#endif
 
 TEST_F(QuantizationUtilsTest, RequantizeManyInNewRange32To8BitEigenVsNonEigen) {
   TestRequantizeManyInNewRangeEigenVsNonEigen<qint32, quint8>();
@@ -446,6 +531,20 @@ TEST_F(QuantizationUtilsTest, QuantizedTensorToFloat) {
                                       -103.0f, 115.0f, 116.0f, 117.0f});
   Tensor output = QuantizedTensorToFloat<quint8>(input, input_min, input_max);
   test::ExpectTensorEqual<float>(expected, output);
+}
+
+// Verify that QuantizedToFloatInPlaceUsingEigen is same result as
+// QuantizedToFloat.
+TEST_F(QuantizationUtilsTest, QuantizedToFloatInPlaceUsingEigen) {
+  thread::ThreadPool threadpool(Env::Default(), "test", 2 /* num_threads */);
+  EigenThreadPoolWrapper wrapper(&threadpool);
+  Eigen::ThreadPoolDevice eigen_device(&wrapper, 2 /* num_threads */);
+
+  TestQuantizedToFloatInPlaceUsingEigen<quint8>(&eigen_device);
+  TestQuantizedToFloatInPlaceUsingEigen<qint8>(&eigen_device);
+  TestQuantizedToFloatInPlaceUsingEigen<quint16>(&eigen_device);
+  TestQuantizedToFloatInPlaceUsingEigen<qint16>(&eigen_device);
+  TestQuantizedToFloatInPlaceUsingEigen<qint32>(&eigen_device);
 }
 
 }  // namespace tensorflow

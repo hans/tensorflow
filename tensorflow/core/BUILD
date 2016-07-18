@@ -124,7 +124,6 @@ cc_library(
         "lib/gtl/priority_queue_util.h",
         "lib/gtl/stl_util.h",  # TODO(josh11b): make internal
         "lib/hash/crc32c.h",  # TODO(josh11b): make internal
-        "lib/hash/hash.h",  # TODO(josh11b): make internal
         "lib/histogram/histogram.h",
         "lib/io/inputbuffer.h",  # TODO(josh11b): make internal
         "lib/io/path.h",
@@ -249,6 +248,7 @@ tf_cuda_library(
         "util/sparse/group_iterator.h",
         "util/sparse/sparse_tensor.h",
         "util/stat_summarizer.h",
+        "util/stream_executor_util.h",
         "util/tensor_format.h",
         "util/tensor_slice_reader.h",
         "util/tensor_slice_reader_cache.h",
@@ -438,6 +438,7 @@ cc_library(
         "//tensorflow/core/kernels:math",
         "//tensorflow/core/kernels:multinomial_op",
         "//tensorflow/core/kernels:nn",
+        "//tensorflow/core/kernels:parameterized_truncated_normal_op",
         "//tensorflow/core/kernels:parsing",
         "//tensorflow/core/kernels:random_ops",
         "//tensorflow/core/kernels:required",
@@ -559,6 +560,8 @@ filegroup(
             "client/**/*.cc",
             "common_runtime/**/*.h",
             "common_runtime/**/*.cc",
+            "debug/**/*.h",
+            "debug/**/*.cc",
             "framework/**/*.h",
             "framework/**/*.cc",
             "graph/**/*.h",
@@ -579,6 +582,7 @@ filegroup(
             "graph/dot.*",
             "lib/jpeg/**/*",
             "lib/png/**/*",
+            "lib/gif/**/*",
             "util/checkpoint_reader.*",
             "util/events_writer.*",
             "util/reporter.*",
@@ -589,6 +593,7 @@ filegroup(
             "platform/google/**/*",
             "platform/jpeg.*",
             "platform/png.*",
+            "platform/gif.*",
             "platform/stream_executor.*",
             "user_ops/**/*.cu.cc",
             "common_runtime/gpu/**/*",
@@ -625,7 +630,7 @@ cc_library(
     alwayslink = 1,
 )
 
-# Full Tensorflow library with operator support. Use this unless reducing
+# Full TensorFlow library with operator support. Use this unless reducing
 # binary size (by packaging a reduced operator set) is a concern.
 cc_library(
     name = "android_tensorflow_lib",
@@ -704,7 +709,7 @@ filegroup(
     visibility = ["//visibility:public"],
 )
 
-# Portable library providing testing functionality for Tensorflow.
+# Portable library providing testing functionality for TensorFlow.
 cc_library(
     name = "android_tensorflow_test_lib",
     testonly = 1,
@@ -824,6 +829,7 @@ cc_library(
         "lib/gtl/iterator_range.h",
         "lib/gtl/manual_constructor.h",
         "lib/gtl/top_n.h",
+        "lib/hash/hash.h",
         "lib/io/iterator.h",
         "lib/io/match.h",
         "lib/io/zlib_compression_options.h",
@@ -831,6 +837,7 @@ cc_library(
         "lib/io/zlib_outputbuffer.h",
         "lib/jpeg/jpeg_handle.h",
         "lib/png/png_io.h",
+        "lib/gif/gif_io.h",
         "lib/random/random.h",
         "lib/random/random_distributions.h",
         "lib/random/weighted_picker.h",
@@ -1083,6 +1090,7 @@ tf_cuda_library(
     linkstatic = 1,
     deps = [
         ":core_cpu_internal",
+        ":debug_graph_utils",
         ":framework",
         ":gpu_tracer",
         ":lib",
@@ -1104,6 +1112,23 @@ tf_cuda_library(
         ":direct_session_internal",
         ":framework",
         ":gpu_tracer",
+        ":lib",
+        ":lib_internal",
+        ":proto_text",
+        ":protos_all_cc",
+    ],
+    alwayslink = 1,
+)
+
+tf_cuda_library(
+    name = "debug_graph_utils",
+    srcs = ["debug/debug_graph_utils.cc"],
+    hdrs = ["debug/debug_graph_utils.h"],
+    copts = tf_copts(),
+    linkstatic = 1,
+    deps = [
+        ":core_cpu_internal",
+        ":framework",
         ":lib",
         ":lib_internal",
         ":proto_text",
@@ -1352,8 +1377,8 @@ tf_cc_tests(
     }),
     linkstatic = tf_kernel_tests_linkstatic(),
     tests = [
-        "client/tensor_c_api_test.cc",
         "common_runtime/device_set_test.cc",
+        "common_runtime/optimization_registry_test.cc",
         "common_runtime/pending_counts_test.cc",
         "common_runtime/session_test.cc",
         "common_runtime/simple_placer_test.cc",
@@ -1362,6 +1387,7 @@ tf_cc_tests(
         "framework/attr_value_util_test.cc",
         "framework/bfloat16_test.cc",
         "framework/cancellation_test.cc",
+        "framework/common_shape_fns_test.cc",
         "framework/function_test.cc",
         "framework/graph_def_util_test.cc",
         "framework/kernel_def_builder_test.cc",
@@ -1428,7 +1454,38 @@ tf_cc_tests(
         ":test_main",
         ":testlib",
         "//tensorflow/cc:cc_ops",
+        "//tensorflow/cc:sendrecv_ops",
         "//tensorflow/core/kernels:ops_util",
+        "//third_party/eigen3",
+    ],
+)
+
+tf_cc_tests(
+    size = "small",
+    linkopts = select({
+        "//tensorflow:darwin": ["-headerpad_max_install_names"],
+        "//conditions:default": [],
+    }),
+    linkstatic = tf_kernel_tests_linkstatic(),
+    tests = [
+        "client/tensor_c_api_test.cc",
+    ],
+    deps = [
+        ":core",
+        ":core_cpu",
+        ":core_cpu_internal",
+        ":direct_session_internal",
+        ":framework",
+        ":framework_internal",
+        ":lib",
+        ":lib_internal",
+        ":proto_text",
+        ":protos_all_cc",
+        ":test",
+        ":test_main",
+        ":testlib",
+        "//tensorflow/core/kernels:array",
+        "//tensorflow/core/kernels:math",
         "//third_party/eigen3",
     ],
 )
@@ -1549,42 +1606,8 @@ tf_cc_test(
     ],
 )
 
-tf_cc_test(
-    name = "debug/debug_gateway_test",
-    size = "small",
-    linkstatic = tf_kernel_tests_linkstatic(),
-    deps = [
-        ":core",
-        ":core_cpu",
-        ":core_cpu_internal",
-        ":debug_gateway_internal",
-        ":direct_session_internal",
-        ":framework",
-        ":framework_internal",
-        ":lib",
-        ":lib_internal",
-        ":ops",
-        ":protos_all_cc",
-        ":test",
-        ":test_main",
-        ":testlib",
-        "//tensorflow/cc:cc_ops",
-        "//tensorflow/core/kernels:control_flow_ops",
-        "//tensorflow/core/kernels:cwise_op",
-        "//tensorflow/core/kernels:dense_update_ops",
-        "//tensorflow/core/kernels:fifo_queue_op",
-        "//tensorflow/core/kernels:identity_op",
-        "//tensorflow/core/kernels:matmul_op",
-        "//tensorflow/core/kernels:ops_util",
-        "//tensorflow/core/kernels:queue_ops",
-        "//tensorflow/core/kernels:session_ops",
-        "//tensorflow/core/kernels:variable_ops",
-        "//third_party/eigen3",
-    ],
-)
-
 tf_cc_test_gpu(
-    name = "debug/debug_gateway_gpu_test",
+    name = "debug/debug_gateway_test",
     size = "small",
     args = ["--heap_check=local"],
     linkstatic = tf_kernel_tests_linkstatic(),
@@ -1594,6 +1617,7 @@ tf_cc_test_gpu(
         ":core_cpu",
         ":core_cpu_internal",
         ":debug_gateway_internal",
+        ":debug_graph_utils",
         ":direct_session",
         ":direct_session_internal",
         ":framework",
@@ -1606,6 +1630,7 @@ tf_cc_test_gpu(
         ":test_main",
         ":testlib",
         "//tensorflow/cc:cc_ops",
+        "//tensorflow/core/kernels:debug_ops",
         "//tensorflow/core/kernels:ops_util",
     ],
 )
@@ -1733,6 +1758,7 @@ tf_cc_test_gpu(
         ":test_main",
         ":testlib",
         "//tensorflow/cc:cc_ops",
+        "//tensorflow/cc:sendrecv_ops",
         "//tensorflow/core/kernels:matmul_op",
         "//tensorflow/core/kernels:ops_util",
     ],
@@ -1820,6 +1846,7 @@ tf_cc_tests(
     tests = [
         "ops/array_ops_test.cc",
         "ops/math_ops_test.cc",
+        "ops/nn_ops_test.cc",
     ],
     deps = [
         ":core",
@@ -1911,6 +1938,10 @@ filegroup(
         "lib/jpeg/testdata/corrupt34_3.jpg",
         # -- hand-edited variant: stops after a restart marker
         "lib/jpeg/testdata/corrupt34_4.jpg",
+        # GIF data
+        "lib/gif/testdata/scan.gif",
+        # GIF data with optimization
+        "lib/gif/testdata/optimized.gif",
     ],
 )
 

@@ -18,6 +18,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import itertools
 import math
 import os
 
@@ -26,6 +27,7 @@ from six.moves import xrange  # pylint: disable=redefined-builtin
 
 from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import dtypes
+from tensorflow.python.framework import errors
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import test_util
 from tensorflow.python.ops import array_ops
@@ -41,34 +43,37 @@ class RGBToHSVTest(test_util.TensorFlowTestCase):
     np.random.seed(7)
     batch_size = 5
     shape = (batch_size, 2, 7, 3)
-    inp = np.random.rand(*shape).astype(np.float32)
 
-    # Convert to HSV and back, as a batch and individually
-    with self.test_session() as sess:
-      batch0 = constant_op.constant(inp)
-      batch1 = image_ops.rgb_to_hsv(batch0)
-      batch2 = image_ops.hsv_to_rgb(batch1)
-      split0 = array_ops.unpack(batch0)
-      split1 = list(map(image_ops.rgb_to_hsv, split0))
-      split2 = list(map(image_ops.hsv_to_rgb, split1))
-      join1 = array_ops.pack(split1)
-      join2 = array_ops.pack(split2)
-      batch1, batch2, join1, join2 = sess.run([batch1, batch2, join1, join2])
+    for nptype in [np.float32, np.float64]:
+      inp = np.random.rand(*shape).astype(nptype)
 
-    # Verify that processing batch elements together is the same as separate
-    self.assertAllClose(batch1, join1)
-    self.assertAllClose(batch2, join2)
-    self.assertAllClose(batch2, inp)
+      # Convert to HSV and back, as a batch and individually
+      with self.test_session() as sess:
+        batch0 = constant_op.constant(inp)
+        batch1 = image_ops.rgb_to_hsv(batch0)
+        batch2 = image_ops.hsv_to_rgb(batch1)
+        split0 = array_ops.unpack(batch0)
+        split1 = list(map(image_ops.rgb_to_hsv, split0))
+        split2 = list(map(image_ops.hsv_to_rgb, split1))
+        join1 = array_ops.pack(split1)
+        join2 = array_ops.pack(split2)
+        batch1, batch2, join1, join2 = sess.run([batch1, batch2, join1, join2])
+
+      # Verify that processing batch elements together is the same as separate
+      self.assertAllClose(batch1, join1)
+      self.assertAllClose(batch2, join2)
+      self.assertAllClose(batch2, inp)
 
   def testRGBToHSVRoundTrip(self):
     data = [0, 5, 13, 54, 135, 226, 37, 8, 234, 90, 255, 1]
-    rgb_np = np.array(data, dtype=np.float32).reshape([2, 2, 3]) / 255.
-    for use_gpu in [True, False]:
-      with self.test_session(use_gpu=use_gpu):
-        hsv = image_ops.rgb_to_hsv(rgb_np)
-        rgb = image_ops.hsv_to_rgb(hsv)
-        rgb_tf = rgb.eval()
-    self.assertAllClose(rgb_tf, rgb_np)
+    for nptype in [np.float32, np.float64]:
+      rgb_np = np.array(data, dtype=nptype).reshape([2, 2, 3]) / 255.
+      for use_gpu in [True, False]:
+        with self.test_session(use_gpu=use_gpu):
+          hsv = image_ops.rgb_to_hsv(rgb_np)
+          rgb = image_ops.hsv_to_rgb(hsv)
+          rgb_tf = rgb.eval()
+      self.assertAllClose(rgb_tf, rgb_np)
 
 
 class GrayscaleToRGBTest(test_util.TensorFlowTestCase):
@@ -225,7 +230,7 @@ class AdjustSaturationTest(test_util.TensorFlowTestCase):
       self.assertAllEqual(y_tf, y_np)
 
 
-class FlipTest(test_util.TensorFlowTestCase):
+class FlipTransposeRotateTest(test_util.TensorFlowTestCase):
 
   def testIdempotentLeftRight(self):
     x_np = np.array([[1, 2, 3], [1, 2, 3]], dtype=np.uint8).reshape([2, 3, 1])
@@ -302,7 +307,8 @@ class FlipTest(test_util.TensorFlowTestCase):
                image_ops.flip_up_down,
                image_ops.random_flip_left_right,
                image_ops.random_flip_up_down,
-               image_ops.transpose_image]:
+               image_ops.transpose_image,
+               image_ops.rot90]:
       transformed_unknown_rank = op(p_unknown_rank)
       self.assertEqual(3, transformed_unknown_rank.get_shape().ndims)
       transformed_unknown_dims = op(p_unknown_dims)
@@ -314,6 +320,23 @@ class FlipTest(test_util.TensorFlowTestCase):
         op(p_wrong_rank)
       with self.assertRaisesRegexp(ValueError, 'must be > 0'):
         op(p_zero_dim)
+
+  def testRot90GroupOrder(self):
+    image = np.arange(24, dtype=np.uint8).reshape([2, 4, 3])
+    for use_gpu in [False, True]:
+      with self.test_session(use_gpu=use_gpu):
+        rotated = image
+        for _ in xrange(4):
+          rotated = image_ops.rot90(rotated)
+        self.assertAllEqual(image, rotated.eval())
+
+  def testRot90NumpyEquivalence(self):
+    image = np.arange(24, dtype=np.uint8).reshape([2, 4, 3])
+    for use_gpu, k in itertools.product([False, True], range(4)):
+      with self.test_session(use_gpu=use_gpu):
+        y_np = np.rot90(image, k=k)
+        y_tf = image_ops.rot90(image, k=k)
+        self.assertAllEqual(y_np, y_tf.eval())
 
 
 class RandomFlipTest(test_util.TensorFlowTestCase):
@@ -1589,6 +1612,56 @@ class PngTest(test_util.TensorFlowTestCase):
         self.assertEqual(image.get_shape().as_list(),
                          [None, None, channels or None])
 
+
+class GifTest(test_util.TensorFlowTestCase):
+
+  def testValid(self):
+    # Read some real GIFs
+    prefix = 'tensorflow/core/lib/gif/testdata/'
+    filename = 'scan.gif'
+    WIDTH = 20
+    HEIGHT = 40
+    STRIDE = 5
+    shape = (12, HEIGHT, WIDTH, 3)
+
+    with self.test_session() as sess:
+      gif0 = io_ops.read_file(prefix + filename)
+      image0 = image_ops.decode_gif(gif0)
+      gif0, image0 = sess.run([gif0, image0])
+
+      self.assertEqual(image0.shape, shape)
+
+      for frame_idx, frame in enumerate(image0):
+        gt = np.zeros(shape[1:], dtype=np.uint8)
+        start = frame_idx * STRIDE
+        end = (frame_idx + 1) * STRIDE
+        print(frame_idx)
+        if end <= WIDTH:
+          gt[:, start:end, :] = 255
+        else:
+          start -= WIDTH
+          end -= WIDTH
+          gt[start:end, :, :] = 255
+
+        self.assertAllClose(frame, gt)
+
+  def testInValid(self):
+    # Read some real GIFs
+    prefix = 'tensorflow/core/lib/gif/testdata/'
+    filename = 'optimized.gif'
+
+    with self.test_session() as sess:
+      gif0 = io_ops.read_file(prefix + filename)
+      image0 = image_ops.decode_gif(gif0)
+      with self.assertRaises(errors.InvalidArgumentError):
+        gif0, image0 = sess.run([gif0, image0])
+
+  def testShape(self):
+      with self.test_session() as sess:
+        gif = constant_op.constant('nonsense')
+        image = image_ops.decode_gif(gif)
+        self.assertEqual(image.get_shape().as_list(),
+                [None, None, None, 3])
 
 class ConvertImageTest(test_util.TensorFlowTestCase):
 

@@ -75,7 +75,7 @@ resized_image = tf.image.resize_images(image, 299, 299)
 
 @@crop_and_resize
 
-## Flipping and Transposing
+## Flipping, Rotating and Transposing
 
 @@flip_up_down
 @@random_flip_up_down
@@ -84,6 +84,8 @@ resized_image = tf.image.resize_images(image, 299, 299)
 @@random_flip_left_right
 
 @@transpose_image
+
+@@rot90
 
 ## Converting Between Colorspaces.
 
@@ -104,7 +106,7 @@ Internally, images are either stored in as one `float32` per channel per pixel
 (implicitly, values are assumed to lie in `[0,1)`) or one `uint8` per channel
 per pixel (values are assumed to lie in `[0,255]`).
 
-Tensorflow can convert between images in RGB or HSV. The conversion functions
+TensorFlow can convert between images in RGB or HSV. The conversion functions
 work only on float images, so you need to convert images in other formats using
 [`convert_image_dtype`](#convert-image-dtype).
 
@@ -153,6 +155,7 @@ type and representation (RGB or HSV).
 ## Working with Bounding Boxes
 
 @@draw_bounding_boxes
+@@non_max_suppression
 @@sample_distorted_bounding_box
 """
 from __future__ import absolute_import
@@ -183,14 +186,14 @@ from tensorflow.python.util.all_util import make_all
 from tensorflow.contrib.framework.python.framework import is_tensor
 
 
-
 ops.NoGradient('RandomCrop')
 ops.NoGradient('RGBToHSV')
 ops.NoGradient('HSVToRGB')
 ops.NoGradient('DrawBoundingBoxes')
 ops.NoGradient('SampleDistortedBoundingBox')
 # TODO(bsteiner): Implement the gradient function for extract_glimpse
-ops.NoGradient("ExtractGlimpse")
+ops.NoGradient('ExtractGlimpse')
+ops.NoGradient('NonMaxSuppression')
 
 
 def _assert(cond, ex_type, msg):
@@ -381,6 +384,33 @@ def flip_up_down(image):
   image = ops.convert_to_tensor(image, name='image')
   _Check3DImage(image, require_static=False)
   return array_ops.reverse(image, [True, False, False])
+
+
+def rot90(image, k=1):
+  """Rotate an image counter-clockwise by 90 degrees.
+
+  Args:
+    image: A 3-D tensor of shape `[height, width, channels].`
+    k: Number of times the image is rotated by 90 degrees.
+
+  Returns:
+    A rotated 3-D tensor of the same type and shape as `image`.
+  """
+  image = ops.convert_to_tensor(image, name='image')
+  _Check3DImage(image, require_static=False)
+  k %= 4
+  if k == 0:
+    return image
+  elif k == 1:
+    return array_ops.transpose(
+        array_ops.reverse(image, [False, True, False]),
+        [1, 0, 2], name='rot90')
+  elif k == 2:
+    return array_ops.reverse(image, [True, True, False], name='rot90')
+  elif k == 3:
+    return array_ops.reverse(
+        array_ops.transpose(image, [1, 0, 2], name='rot90'),
+        [False, True, False])
 
 
 def transpose_image(image):
@@ -991,6 +1021,12 @@ def _ResizeShape(op):
   return [tensor_shape.TensorShape(
       [input_shape[0], height, width, input_shape[3]])]
 
+@ops.RegisterShape('DecodeGif')
+def _ImageDecodeShape(op):
+  """Shape function for decode gif."""
+  unused_input_shape = op.inputs[0].get_shape().merge_with(
+      tensor_shape.scalar())
+  return [tensor_shape.TensorShape([None, None, None, 3])]
 
 @ops.RegisterShape('DecodeJpeg')
 @ops.RegisterShape('DecodePng')
@@ -1363,6 +1399,12 @@ def _crop_and_resize_shape(op):
     crop_width = None
   return [tensor_shape.TensorShape(
       [box_shape[0], crop_height, crop_width, image_shape[3]])]
+
+
+@ops.RegisterShape('NonMaxSuppression')
+def _non_max_suppression_shape(_):
+  """Shape function for the NonMaxSuppression op."""
+  return [tensor_shape.TensorShape([None])]
 
 
 __all__ = make_all(__name__)

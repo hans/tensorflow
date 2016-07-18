@@ -350,9 +350,26 @@ contents: 0-D. PNG-encoded image.
 )doc");
 
 // --------------------------------------------------------------------------
+REGISTER_OP("DecodeGif")
+    .Input("contents: string")
+    .Output("image: uint8")
+    .Doc(R"doc(
+Decode the first frame of a GIF-encoded image to a uint8 tensor.
+
+GIF with frame or transparency compression are not supported
+convert animated GIF from compressed to uncompressed by:
+
+convert $src.gif -coalesce $dst.gif
+
+contents: 0-D.  The GIF-encoded image.
+image: 4-D with shape `[num_frames, height, width, 3]`. RGB order
+)doc");
+
+// --------------------------------------------------------------------------
 REGISTER_OP("RGBToHSV")
-    .Input("images: float")
-    .Output("output: float")
+    .Input("images: T")
+    .Output("output: T")
+    .Attr("T: {float, double} = DT_FLOAT")
     .Doc(R"doc(
 Converts one or more images from RGB to HSV.
 
@@ -370,8 +387,9 @@ output: `images` converted to HSV.
 
 // --------------------------------------------------------------------------
 REGISTER_OP("HSVToRGB")
-    .Input("images: float")
-    .Output("output: float")
+    .Input("images: T")
+    .Output("output: T")
+    .Attr("T: {float, double} = DT_FLOAT")
     .Doc(R"doc(
 Convert one or more images from HSV to RGB.
 
@@ -495,7 +513,6 @@ use_image_if_no_bounding_boxes: Controls behavior if no bounding boxes supplied.
   If true, assume an implicit bounding box covering the whole input. If false,
   raise an error.
 )doc");
-
 
 // --------------------------------------------------------------------------
 
@@ -662,6 +679,46 @@ box_ind: A 1-D tensor of shape `[num_boxes]` with int32 values in `[0, batch)`.
 output: A 2-D tensor of shape `[num_boxes, 4]`.
 method: A string specifying the interpolation method. Only 'bilinear' is
   supported for now.
+)doc");
+
+// --------------------------------------------------------------------------
+
+REGISTER_OP("NonMaxSuppression")
+    .Input("boxes: float")
+    .Input("scores: float")
+    .Input("max_output_size: int32")
+    .Output("selected_indices: int32")
+    .Attr("iou_threshold: float = 0.5")
+    .Doc(R"doc(
+Greedily selects a subset of bounding boxes in descending order of score,
+pruning away boxes that have high intersection-over-union (IOU) overlap
+with previously selected boxes.  Bounding boxes are supplied as
+[y1, x1, y2, x2], where (y1, x1) and (y2, x2) are the coordinates of any
+diagonal pair of box corners and the coordinates can be provided as normalized
+(i.e., lying in the interval [0, 1]) or absolute.  Note that this algorithm
+is agnostic to where the origin is in the coordinate system.  Note that this
+algorithm is invariant to orthogonal transformations and translations
+of the coordinate system; thus translating or reflections of the coordinate
+system result in the same boxes being selected by the algorithm.
+
+The output of this operation is a set of integers indexing into the input
+collection of bounding boxes representing the selected boxes.  The bounding
+box coordinates corresponding to the selected indices can then be obtained
+using the tf.gather operation.  For example:
+
+  selected_indices = tf.image.non_max_suppression(
+      boxes, scores, max_output_size, iou_threshold)
+  selected_boxes = tf.gather(boxes, selected_indices)
+
+boxes: A 2-D float tensor of shape `[num_boxes, 4]`.
+scores: A 1-D float tensor of shape `[num_boxes]` representing a single
+  score corresponding to each box (each row of boxes).
+max_output_size: A scalar integer tensor representing the maximum number of
+  boxes to be selected by non max suppression.
+iou_threshold: A float representing the threshold for deciding whether boxes
+  overlap too much with respect to IOU.
+selected_indices: A 1-D integer tensor of shape `[M]` representing the selected
+  indices from the boxes tensor, where `M <= max_output_size`.
 )doc");
 
 }  // namespace tensorflow
