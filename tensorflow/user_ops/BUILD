@@ -111,6 +111,22 @@ py_test(
 )
 
 
+tf_custom_op_library(
+    name = "thin_stack_ops.so",
+    srcs = [
+      "thin_stack_ops.cc",
+
+      "thin_stack_lookup_kernel.cc",
+      "thin_stack_lookup_kernel.h",
+
+      # HACK: 'deps' key doesn't seem to work here.. manually include source files
+      "floaty_gather_kernel.cc",
+      "floaty_gather_kernel.h",
+    ],
+    gpu_srcs = [], # TODO
+)
+
+
 filegroup(
     name = "all_files",
     srcs = glob(
