@@ -119,9 +119,14 @@ tf_custom_op_library(
       "thin_stack_lookup_kernel.cc",
       "thin_stack_lookup_kernel.h",
 
+      "thin_stack_update_kernel.cc",
+      "thin_stack_update_kernel.h",
+
       # HACK: 'deps' key doesn't seem to work here.. manually include source files
       "floaty_gather_kernel.cc",
       "floaty_gather_kernel.h",
+      "floaty_scatter_kernel.cc",
+      "floaty_scatter_kernel.h",
     ],
     gpu_srcs = [], # TODO
 )
