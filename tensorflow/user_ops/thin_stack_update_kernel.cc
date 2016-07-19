@@ -1,3 +1,7 @@
+#define EIGEN_USE_THREADS
+// this prevents build errors; don't know why?
+
+#include "third_party/eigen3/unsupported/Eigen/CXX11/Tensor"
 #include "tensorflow/user_ops/thin_stack_update_kernel.h"
 
 #include "tensorflow/core/framework/op_kernel.h"
@@ -49,9 +53,16 @@ class ThinStackUpdateOp : public OpKernel {
       OP_REQUIRES_OK(c, c->allocate_output(3, buffer_cursors.shape(), &buffer_cursors_out));
 
       // Allocate temp storage: masked shift_value, reduce_value
-      Tensor stack_top;
+      Tensor stack_top, queue_idxs, batch_range;
       OP_REQUIRES_OK(c, c->allocate_temp(DataTypeToEnum<float>::value,
                                          shift_val.shape(), &stack_top));
+      OP_REQUIRES_OK(c, c->allocate_temp(DataTypeToEnum<float>::value,
+                                         cursors.shape(), &queue_idxs));
+      OP_REQUIRES_OK(c, c->allocate_temp(DataTypeToEnum<float>::value,
+                                         cursors.shape(), &batch_range));
+      TTypes<float>::Flat batch_range_d = batch_range.flat<float>();
+      for (int32 i = 0; i < batch_size; ++i)
+        batch_range_d(i) = static_cast<float>(i);
 
       // TODO: perform masking
 
@@ -59,7 +70,35 @@ class ThinStackUpdateOp : public OpKernel {
       OP_REQUIRES(c, stack_target_row.CopyFrom(stack_top, stack_top.shape()),
           errors::Internal("Something is very broken"));
 
-      // TODO: update cursors
+      const Device& device = c->eigen_device<Device>();
+
+      // Update auxiliary data.
+
+      // cursors = cursors + (transitions * -1 + (1 - transitions) * 1)
+      // === cursors = cursors + 1 - 2 * transitions
+      cursors_out->flat<float>().device(device) = cursors.flat<float>() + 1.0f - 2.0f * transitions.flat<float>();
+
+      // queue_idxs = max(0, cursors_next * batch_size + batch_range)
+      queue_idxs.flat<float>().device(device) = cursors_out->flat<float>() * ((float) batch_size) + batch_range_d;
+
+      // Build broadcasted matrix from scalar `t`
+      Eigen::IndexList<Eigen::type2index<1>, int> broadcast;
+      broadcast.set(0, batch_size);
+
+      // TODO: copy over queue into queue_out
+
+      // scatter_update(queue, queue_idxs, t)
+      // TODO: either shoe this into scatter_update or write a custom functor / kernel
+      TTypes<float>::Flat queue_d = queue_out->flat<float>();
+      const TTypes<float>::Flat& queue_idxs_d = queue_idxs.flat<float>();
+      for (int32 i = 0; i < batch_size; i++)
+        queue_d(queue_idxs_d(i)) = static_cast<float>(t);
+
+      /* functor::FloatyScatterFunctor<Device, float, float, floaty_scatter_kernel::UpdateOp::ASSIGN> f_scatter; */
+      /* auto t_broadcast = batch_range_d.constant((float) t).broadcast(broadcast); */
+      /* f_scatter(c, c->eigen_device<Device>(), queue.matrix<float>(), t_broadcast, queue_idxs.flat<float>); */
+
+      // TODO buffer_cursors_out
     }
 
 };
