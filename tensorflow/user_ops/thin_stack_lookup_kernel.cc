@@ -118,8 +118,6 @@ struct ThinStackLookup<CPUDevice> {
     // buffer_top = gather(buffer, buff_idxs)
     float max_buff_idx = buffer_size - 1.0f;
     buffer_ptrs.flat<float>().device(d) = (buffer_cursors * ((float) batch_size) + batch_range_d).cwiseMin(max_buff_idx).cwiseMax(0.0f);
-    // TODO: again, really necessary?
-//    TTypes<float>::ConstFlat buffer_ptrs_f(buffer_ptrs.data(), buffer_ptrs.dimensions());
     gather_functor(d, buffer, const_cast<const Tensor&>(buffer_ptrs).flat<float>(), buffer_top);
 
   }

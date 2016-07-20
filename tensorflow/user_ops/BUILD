@@ -112,7 +112,7 @@ py_test(
 
 
 tf_custom_op_library(
-    name = "thin_stack_ops.so",
+    name = "thin_stack_ops_impl.so",
     srcs = [
       "thin_stack_ops.cc",
 
@@ -129,6 +129,14 @@ tf_custom_op_library(
       "floaty_scatter_kernel.h",
     ],
     gpu_srcs = [], # TODO
+)
+
+
+py_library(
+    name = "thin_stack_ops",
+    srcs = ["thin_stack_ops.py"],
+    data = [":thin_stack_ops_impl.so"],
+    deps = ["//tensorflow:tensorflow_py"],
 )
 
 
