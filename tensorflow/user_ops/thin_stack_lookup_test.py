@@ -59,17 +59,17 @@ class ThinStackLookupTest(test.TestCase):
       buffer_val = buffer.eval()
 
       ret = ts.thin_stack_lookup(stack, buffer, queue, cursors, buffer_cursors, t)
-      stack1, stack2, buf_top, stack_2_ptrs = s.run(ret)
+      stack1, stack2, buf_top, stack2_ptrs = s.run(ret)
 
     stack1_expected = stack_val[4:6]
     stack2_expected = np.array([stack_val[0], stack_val[3]])
-    buf_top_expected = np.arary([buffer_val[4], buffer_val[5]])
+    buf_top_expected = np.array([buffer_val[4], buffer_val[5]])
     stack2_ptrs_expected = np.array([0, 3])
 
-    self.assertEqual(stack1_expected, stack1)
-    self.assertEqual(stack2_expected, stack2)
-    self.assertEqual(buf_top_expected, buf_top)
-    self.assertEqual(stack2_ptrs_expected, stack2_ptrs)
+    self.assertAllEqual(stack1_expected, stack1)
+    self.assertAllEqual(stack2_expected, stack2)
+    self.assertAllEqual(buf_top_expected, buf_top)
+    self.assertAllClose(stack2_ptrs_expected, stack2_ptrs)
 
 
 if __name__ == "__main__":

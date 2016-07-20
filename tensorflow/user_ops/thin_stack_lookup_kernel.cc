@@ -50,7 +50,7 @@ class ThinStackLookupOp : public OpKernel {
       // stack1 read is a simple memory share; happens outside device-specific
       // functor / implementation
       int32 start_row = (t - 1) * batch_size;
-      stack1_out->CopyFrom(stack.Slice(start_row, batch_size), stack1_out->shape());
+      stack1_out->CopyFrom(stack.Slice(start_row, start_row + batch_size), stack1_out->shape());
 
       functor::ThinStackLookup<Device> lookup_functor;
       lookup_functor(c, c->eigen_device<Device>(), t,
