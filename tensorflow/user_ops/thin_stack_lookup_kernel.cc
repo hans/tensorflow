@@ -47,12 +47,17 @@ class ThinStackLookupOp : public OpKernel {
       OP_REQUIRES_OK(c, c->allocate_output(2, buffer_elm_shape, &buf_top_out));
       OP_REQUIRES_OK(c, c->allocate_output(3, cursors.shape(), &stack2_ptrs));
 
+      // stack1 read is a simple memory share; happens outside device-specific
+      // functor / implementation
+      int32 start_row = (t - 1) * batch_size;
+      stack1_out->CopyFrom(stack.Slice(start_row, batch_size), stack1_out->shape());
+
       functor::ThinStackLookup<Device> lookup_functor;
       lookup_functor(c, c->eigen_device<Device>(), t,
                      stack.matrix<float>(), buffer.matrix<float>(), queue.flat<float>(),
                      cursors.flat<float>(), buffer_cursors.flat<float>(),
-                     stack1_out->matrix<float>(), stack2_out->matrix<float>(),
-                     buf_top_out->matrix<float>(), stack2_ptrs->flat<float>());
+                     stack2_out->matrix<float>(),
+                     buf_top_out->matrix<float>(), stack2_ptrs->matrix<float>());
 
     }
 };
@@ -63,56 +68,53 @@ namespace functor {
 template <>
 struct ThinStackLookup<CPUDevice> {
 
-  void operator()(OpKernelContext *c, const Device& d,
+  void operator()(OpKernelContext *c, const CPUDevice& d,
                   int32 t,
                   typename TTypes<float>::ConstMatrix stack,
                   typename TTypes<float>::ConstMatrix buffer,
-                  typename TTypes<float>::ConstFlat queue,
+                  typename TTypes<float>::ConstMatrix queue,
                   typename TTypes<float>::ConstFlat cursors,
                   typename TTypes<float>::ConstFlat buffer_cursors,
-                  typename TTypes<float>::Matrix stack1,
                   typename TTypes<float>::Matrix stack2,
-                  typename TTypes<float>::Flat stack2_ptrs) {
+                  typename TTypes<float>::Matrix buffer_top,
+                  typename TTypes<float>::Matrix stack2_ptrs) {
 
     // Get useful shape constants from inputs.
-    const int32 batch_size = buffer_cursors.NumElements();
-    const int32 model_dim = stack.dim_size(1);
-    const int32 embedding_dim = buffer.dim_size(1);
-    const int32 buffer_size = buffer.dim_size(0);
+    const int32 batch_size = buffer_cursors.size();
+    const int32 buffer_size = buffer.dimension(0);
 
     // Alloc helpers
     // TODO: do once?
-    Tensor batch_range;
+    Tensor batch_range, queue_ptrs;
     OP_REQUIRES_OK(c, c->allocate_temp(DataTypeToEnum<float>::value,
-                                        cursors.shape(), &batch_range));
+                                       TensorShape({batch_size}), &batch_range));
+    OP_REQUIRES_OK(c, c->allocate_temp(DataTypeToEnum<float>::value,
+                                       TensorShape({batch_size}), &queue_ptrs));
     TTypes<float>::Flat batch_range_d = batch_range.flat<float>();
+    TTypes<float>::Flat queue_ptrs_d = queue_ptrs.flat<float>();
     for (int32 i = 0; i < batch_size; ++i)
       batch_range_d(i) = static_cast<float>(i);
-
-    // stack1 can share data with stack (no destructive writes on either)
-    int32 start_row = (static_cast<int32>(t) - 1) * batch_size;
-    OP_REQUIRES(c, stack1_out->CopyFrom(stack.Slice(start_row, batch_size),
-                                        stack1_out->shape()),
-                errors::Unknown("Derp"));
 
     functor::FloatyGather<Device, float, float> gather_functor;
 
     // queue_ptrs = (cursors - 1) * batch_size + batch_range
     // stack2_ptrs = gather(queue, queue_ptrs)
-    TTypes<float>::ConstFlat queue_ptrs = cursors.flat<float>() - 1.0f;//(cursors.flat<float>() - 1.0f) * ((float) batch_size) + batch_range_d;
-    gather_functor(device, queue.matrix<float>(), cursors.flat<float>(), stack2_ptrs->matrix<float>());
+    queue_ptrs_d.device(d) = (cursors - 1.0f) * ((float) batch_size) + batch_range_d;
+    TTypes<float>::ConstFlat queue_ptrs_f(queue_ptrs_d.data(), queue_ptrs_d.dimensions());
+    gather_functor(d, queue, queue_ptrs_f, stack2_ptrs);
 
     // stack2_ptrs = max(0, stack2_ptrs) * batch_size + batch_range
-    stack2_ptrs->flat<float>().device(device) = stack2_ptrs->flat<float>().cwiseMax(0.0f) * ((float) batch_size) + batch_range_d;
+    stack2_ptrs.device(d) = stack2_ptrs.cwiseMax(0.0f) * ((float) batch_size) + batch_range_d;
 
     // stack2 = gather(stack, stack2_ptrs)
-    gather_functor(device, stack.matrix<float>(), (const_cast<const Tensor&>(*stack2_ptrs)).flat<float>(), stack2_out->matrix<float>());
+    TTypes<float>::ConstFlat stack2_ptrs_f(stack2_ptrs.data(), stack2_ptrs.dimensions());
+    gather_functor(d, stack, stack2_ptrs_f, stack2);
 
     // buff_idxs = (buff_cursors * batch_size) + batch_range
     // buff_idxs = max(0, min(buff_idxs, (buff_size * batch_size) - 1))
     // buffer_top = gather(buffer, buff_idxs)
     float max_buff_idx = buffer_size - 1.0f;
-    gather_functor(device, buffer.matrix<float>(), (buffer_cursors.flat<float>() * ((float) batch_size) + batch_range_d).cwiseMin(max_buff_idx).cwiseMax(0.0f), buf_top_out->matrix<float>());
+    gather_functor(d, buffer, (buffer_cursors * ((float) batch_size) + batch_range_d).cwiseMin(max_buff_idx).cwiseMax(0.0f), buffer_top);
 
   }
 
