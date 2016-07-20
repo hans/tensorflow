@@ -13,12 +13,12 @@ template <typename Device>
 struct ThinStackLookup {
   void operator()(OpKernelContext *c, const Device& d, int32 t,
                   typename TTypes<float>::ConstMatrix stack,
-                  typename TTypes<float>::ConstMatrix queue,
+                  typename TTypes<float>::ConstFlat queue,
                   typename TTypes<float>::ConstFlat cursors,
                   typename TTypes<float>::ConstFlat buffer_cursors,
                   typename TTypes<float>::Matrix stack2,
                   typename TTypes<float>::Matrix buffer_top,
-                  typename TTypes<float>::Matrix stack2_ptrs);
+                  typename TTypes<float>::Flat stack2_ptrs);
 };
 } // namespace functor
 
