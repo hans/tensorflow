@@ -135,8 +135,8 @@ REGISTER_KERNEL_BUILDER(Name("ThinStackLookup").Device(DEVICE_CPU).TypeConstrain
 // Forward declare the GPU functor
 namespace functor {
 template <>
-struct ThinStackLookup<GPUDevice>::operator()(
-    OpKernelContext *c, const CPUDevice& d, int32 t,
+void ThinStackLookup<GPUDevice>::operator()(
+    OpKernelContext *c, const GPUDevice& d, int32 t,
     typename TTypes<float>::ConstMatrix stack,
     typename TTypes<float>::ConstMatrix buffer,
     typename TTypes<float>::ConstFlat queue,
@@ -146,6 +146,7 @@ struct ThinStackLookup<GPUDevice>::operator()(
     typename TTypes<float>::Matrix buffer_top,
     typename TTypes<float>::Flat stack2_ptrs);
 extern template struct ThinStackLookup<GPUDevice>;
+} // namespace functor
 
 REGISTER_KERNEL_BUILDER(Name("ThinStackLookup").Device(DEVICE_GPU).TypeConstraint<float>("T"),
                         ThinStackLookupOp<GPUDevice>);

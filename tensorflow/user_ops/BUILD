@@ -128,7 +128,18 @@ tf_custom_op_library(
       "floaty_scatter_kernel.cc",
       "floaty_scatter_kernel.h",
     ],
-    gpu_srcs = [], # TODO
+    gpu_srcs = [
+        "thin_stack_ops.cc",
+
+        "thin_stack_lookup_kernel.cc",
+        "thin_stack_lookup_kernel.cu.cc",
+        "thin_stack_lookup_kernel.h",
+
+        "floaty_gather_kernel_gpu.cu.cc",
+        "floaty_gather_kernel.h",
+        "floaty_scatter_kernel_gpu.cu.cc",
+        "floaty_scatter_kernel.h",
+    ],
 )
 
 
