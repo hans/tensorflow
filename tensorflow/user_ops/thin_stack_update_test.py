@@ -73,12 +73,6 @@ class ThinStackUpdateTest(test.TestCase):
                                  stack, queue, cursors, buffer_cursors, t)
       stack_next, queue_next, cursors_next, buffer_cursors_next = s.run(ret)
 
-    print(stack_next)
-    print(queue_next)
-    print(cursors_next)
-    print(buffer_cursors_next)
-
-    # TODO assert that we are sharing underlying data here?
     stack_expected = np.copy(stack_val)
     stack_expected[6] = buffer_val[4]
     stack_expected[7] = stack_val[5] + stack_val[3]
