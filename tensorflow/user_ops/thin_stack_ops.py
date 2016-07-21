@@ -36,4 +36,15 @@ def _thin_stack_update_shape(op):
             buffer_cursors.get_shape()]
 
 
+@ops.RegisterGradient("ThinStackUpdate")
+def _thin_stack_update_gradient(op, grad):
+    batch_size = op.inputs[4].get_shape()[0]
+    t = op.inputs[6]
+
+    stack_grad = grad[0]
+    input_grad = stack_grad[t * batch_size:(t + 1) * batch_size]
+
+    return input_grad, None, None, None, None, None, None
+
+
 # TODO grad definitions: just invoke grad ops
