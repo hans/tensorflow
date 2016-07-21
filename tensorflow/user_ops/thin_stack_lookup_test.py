@@ -72,6 +72,10 @@ class ThinStackLookupTest(test.TestCase):
     self.assertAllClose(stack2_ptrs_expected, stack2_ptrs)
 
 
+class GpuThinStackLookupTest(ThinStackLookupTest):
+  use_gpu = True
+
+
 if __name__ == "__main__":
   test.main()
 

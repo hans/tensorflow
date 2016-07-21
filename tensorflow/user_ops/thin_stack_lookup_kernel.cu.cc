@@ -73,6 +73,8 @@ struct ThinStackLookup<GPUDevice> {
 };
 } // namespace functor
 
+template struct functor::ThinStackLookup<GPUDevice>;
+
 } // namespace tensorflow
 
 #endif // GOOGLE_CUDA

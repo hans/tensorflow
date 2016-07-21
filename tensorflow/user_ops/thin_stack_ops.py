@@ -10,7 +10,13 @@ from tensorflow.python.framework import ops
 from tensorflow.python.platform import resource_loader
 
 
-_module = load_op_library(os.path.join(resource_loader.get_data_files_path(), "thin_stack_ops_impl.so"))
+try:
+  # Try to load the GPU-enabled library first.
+  _module = load_op_library("/tf-dev/bazel-bin/tensorflow/user_ops/libthin_stack_ops_impl_gpu.so")
+except Exception, e:
+  print(e)
+  # Load CPU only.
+  _module = load_op_library(os.path.join(resource_loader.get_data_files_path(), "thin_stack_ops_impl.so"))
 
 thin_stack_lookup = _module.thin_stack_lookup
 thin_stack_update = _module.thin_stack_update
