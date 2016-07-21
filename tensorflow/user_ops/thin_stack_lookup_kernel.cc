@@ -131,4 +131,25 @@ REGISTER_KERNEL_BUILDER(Name("ThinStackLookup").Device(DEVICE_CPU).TypeConstrain
                         ThinStackLookupOp<CPUDevice>);
 
 
+#if GOOGLE_CUDA
+// Forward declare the GPU functor
+namespace functor {
+template <>
+struct ThinStackLookup<GPUDevice>::operator()(
+    OpKernelContext *c, const CPUDevice& d, int32 t,
+    typename TTypes<float>::ConstMatrix stack,
+    typename TTypes<float>::ConstMatrix buffer,
+    typename TTypes<float>::ConstFlat queue,
+    typename TTypes<float>::ConstFlat cursors,
+    typename TTypes<float>::ConstFlat buffer_cursors,
+    typename TTypes<float>::Matrix stack2,
+    typename TTypes<float>::Matrix buffer_top,
+    typename TTypes<float>::Flat stack2_ptrs);
+extern template struct ThinStackLookup<GPUDevice>;
+
+REGISTER_KERNEL_BUILDER(Name("ThinStackLookup").Device(DEVICE_GPU).TypeConstraint<float>("T"),
+                        ThinStackLookupOp<GPUDevice>);
+#endif // GOOGLE_CUDA
+
+
 } // namespace tensorflow
