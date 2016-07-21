@@ -22,8 +22,7 @@ Perform thin-stack lookup operation.
 
 
 REGISTER_OP("ThinStackUpdate")
-    .Input("shift_val: T")
-    .Input("reduce_val: T")
+    .Input("input_val: T")
     .Input("transitions: float")
     .Input("stack: Ref(T)")
     .Input("queue: Ref(float)")

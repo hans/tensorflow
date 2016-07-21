@@ -12,10 +12,7 @@ namespace functor {
 template <typename Device>
 struct ThinStackUpdate {
   void operator()(OpKernelContext *c, const Device& d, int32 t,
-                  typename TTypes<float>::ConstMatrix shift_val,
-                  typename TTypes<float>::ConstMatrix reduce_val,
                   typename TTypes<float>::ConstFlat transitions,
-                  typename TTypes<float>::Matrix stack_top,
                   typename TTypes<float>::Flat queue,
                   typename TTypes<float>::Flat cursors,
                   typename TTypes<float>::Flat buffer_cursors);
