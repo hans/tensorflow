@@ -108,7 +108,7 @@ struct ThinStackLookup<CPUDevice> {
     // stack2_ptrs_shift = max(0, stack2_ptrs) * batch_size + batch_range
     // stack2 = gather(stack, stack2_ptrs_shift)
     // HACK: reuse queue_ptrs for this purpose
-    queue_ptrs_d = stack2_ptrs.cwiseMax(0.0f) * ((float) batch_size) + ((float) i);
+    queue_ptrs_d = stack2_ptrs.cwiseMax(0.0f) * ((float) batch_size) + batch_range_d;
     TTypes<float>::ConstFlat stack2_ptrs_shift(queue_ptrs_d.data(), queue_ptrs_d.dimensions());
     gather_functor(d, stack, stack2_ptrs_shift, stack2);
 
