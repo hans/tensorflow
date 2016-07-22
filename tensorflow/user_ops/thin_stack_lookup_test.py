@@ -53,13 +53,17 @@ class ThinStackLookupTest(test.TestCase):
                                     0., 0.])
       cursors = constant_op.constant([0., 2.])
       buffer_cursors = constant_op.constant([2., 3.])
-      t = constant_op.constant(3)
 
       stack_val = stack.eval()
       buffer_val = buffer.eval()
 
-      ret = ts.thin_stack_lookup(stack, buffer, queue, cursors, buffer_cursors, t)
+      ret = ts.thin_stack_lookup(stack, buffer, queue, cursors, buffer_cursors, timestep=3)
       stack1, stack2, buf_top, stack2_ptrs = s.run(ret)
+
+    print(stack1)
+    print(stack2)
+    print(buf_top)
+    print(stack2_ptrs)
 
     stack1_expected = stack_val[4:6]
     stack2_expected = np.array([stack_val[0], stack_val[3]])

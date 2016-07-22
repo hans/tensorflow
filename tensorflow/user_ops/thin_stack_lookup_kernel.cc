@@ -19,7 +19,9 @@ class ThinStackLookupOp : public OpKernel {
 
   public:
 
-    explicit ThinStackLookupOp(OpKernelConstruction* c) : OpKernel(c) {  };
+    explicit ThinStackLookupOp(OpKernelConstruction* c) : OpKernel(c) {
+      OP_REQUIRES_OK(c, c->GetAttr("timestep", &t));
+    }
 
     void Compute(OpKernelContext *c) override {
       const Tensor& stack = c->input(0);
@@ -27,12 +29,6 @@ class ThinStackLookupOp : public OpKernel {
       const Tensor& queue = c->input(2);
       const Tensor& cursors = c->input(3);
       const Tensor& buffer_cursors = c->input(4);
-
-      const Tensor& t_ = c->input(5);
-      OP_REQUIRES(c, TensorShapeUtils::IsScalar(t_.shape()),
-            errors::InvalidArgument("t should be a scalar, but got shape ",
-                                    t_.shape().DebugString()));
-      const int32 t = internal::SubtleMustCopy(t_.scalar<int32>()());
 
       // Allocate outputs.
       const int32 batch_size = buffer_cursors.NumElements();
@@ -60,6 +56,10 @@ class ThinStackLookupOp : public OpKernel {
                      buf_top_out->matrix<float>(), stack2_ptrs->flat<float>());
 
     }
+
+  private:
+
+    int t;
 };
 
 

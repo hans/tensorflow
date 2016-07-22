@@ -10,11 +10,11 @@ REGISTER_OP("ThinStackLookup")
     .Input("queue: float")
     .Input("cursors: float")
     .Input("buffer_cursors: float")
-    .Input("t: int32")
     .Output("stack1: T")
     .Output("stack2: T")
     .Output("buf_top: T")
     .Output("stack2_ptrs: float")
+    .Attr("timestep: int")
     .Attr("T: {float}")
     .Doc(R"doc(
 Perform thin-stack lookup operation.
