@@ -22,7 +22,9 @@ class ThinStackUpdateOp : public OpKernel {
 
   public:
 
-    explicit ThinStackUpdateOp(OpKernelConstruction* c) : OpKernel(c) {  };
+    explicit ThinStackUpdateOp(OpKernelConstruction* c) : OpKernel(c) {
+      OP_REQUIRES_OK(c, c->GetAttr("timestep", &t));
+    }
 
     void Compute(OpKernelContext *c) override {
       const Tensor& input_val = c->input(0);
@@ -33,12 +35,6 @@ class ThinStackUpdateOp : public OpKernel {
       Tensor queue = c->mutable_input(3, true);
       Tensor cursors = c->mutable_input(4, true);
       Tensor buffer_cursors = c->mutable_input(5, true);
-
-      const Tensor& t_ = c->input(6);
-      OP_REQUIRES(c, TensorShapeUtils::IsScalar(t_.shape()),
-          errors::InvalidArgument("t should be a scalar, but got shape ",
-                                  t_.shape().DebugString()));
-      const int32 t = internal::SubtleMustCopy(t_.scalar<int32>()());
 
       const int32 batch_size = buffer_cursors.NumElements();
 
@@ -57,6 +53,10 @@ class ThinStackUpdateOp : public OpKernel {
                      buffer_cursors.flat<float>());
 
     }
+
+  private:
+
+    int t;
 
 };
 
