@@ -102,18 +102,14 @@ struct ThinStackLookup<CPUDevice> {
     // queue_ptrs = (cursors - 1) * batch_size + batch_range
     // stack2_ptrs = gather(queue, queue_ptrs)
     queue_ptrs_d.device(d) = (cursors - 1.0f) * ((float) batch_size) + batch_range_d;
-    for (int32 i = 0; i < batch_size; i++) {
-      float queue_ptr = (cursors(i) - 1.0f) * ((float) batch_size) + ((float) i);
-      stack2_ptrs(i) = queue(queue_ptr);
-    }
+    for (int32 i = 0; i < batch_size; i++)
+      stack2_ptrs(i) = queue(queue_ptrs_d(i));
 
     // stack2_ptrs_shift = max(0, stack2_ptrs) * batch_size + batch_range
     // stack2 = gather(stack, stack2_ptrs_shift)
     // HACK: reuse queue_ptrs for this purpose
-    for (int32 i = 0; i < batch_size; i++) {
-      queue_ptrs(i) = std::max(0.0f, stack2_ptrs(i)) * ((float) batch_size) + ((float) i);
-    }
-    TTypes<float>::ConstFlat stack2_ptrs_shift(queue_ptrs.data(), queue_ptrs.dimensions());
+    queue_ptrs_d = stack2_ptrs.cwiseMax(0.0f) * ((float) batch_size) + ((float) i);
+    TTypes<float>::ConstFlat stack2_ptrs_shift(queue_ptrs_d.data(), queue_ptrs_d.dimensions());
     gather_functor(d, stack, stack2_ptrs_shift, stack2);
 
     // buffer_ptrs = (buff_cursors * batch_size) + batch_range
