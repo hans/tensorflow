@@ -60,20 +60,15 @@ class ThinStackLookupTest(test.TestCase):
       ret = ts.thin_stack_lookup(stack, buffer, queue, cursors, buffer_cursors, timestep=3)
       stack1, stack2, buf_top, stack2_ptrs = s.run(ret)
 
-    print(stack1)
-    print(stack2)
-    print(buf_top)
-    print(stack2_ptrs)
-
     stack1_expected = stack_val[4:6]
     stack2_expected = np.array([stack_val[0], stack_val[3]])
     buf_top_expected = np.array([buffer_val[4], buffer_val[5]])
-    stack2_ptrs_expected = np.array([0, 3])
+    stack2_ptrs_expected = np.array([0, 1])
 
     self.assertAllEqual(stack1_expected, stack1)
+    self.assertAllClose(stack2_ptrs_expected, stack2_ptrs)
     self.assertAllEqual(stack2_expected, stack2)
     self.assertAllEqual(buf_top_expected, buf_top)
-    self.assertAllClose(stack2_ptrs_expected, stack2_ptrs)
 
 
 class GpuThinStackLookupTest(ThinStackLookupTest):

@@ -17,33 +17,42 @@ typedef Eigen::GpuDevice GPUDevice;
 
 // In vectorized form:
 //
-//     idxs = min(0, idxs + idx_scal_shift) * idx_scal_mul
+//     idxs = idxs + idx_scal_shift
+//     if idx_min >= 0:
+//         idxs = min(idx_min, idxs)
+//     else:
+//         idxs = wraparound(idxs)
+//     idxs *= idx_scal_mul
 //     idxs += idx_vec_shift_coeff * idx_vec_shift
-//     if idx_limit >= 0:
-//        idxs = max(idx_limit, idxs)
+//     if idx_max >= 0:
+//        idxs = max(idx_max, idxs)
 //     out = src[idxs]
 __global__ void k_gather_shifted(const float* src, const float* idxs, float* dst,
                                  int src_N, int N, int D, float idx_scal_shift,
                                  float idx_scal_mul, float idx_vec_shift_coeff,
-                                 float* idx_vec_shift, int idx_limit) {
+                                 float* idx_vec_shift, int idx_min, int idx_max) {
   for (int i0 = blockIdx.x; i0 < N; i0 += gridDim.x) {
     float fsrc_idx = idxs[i0] + idx_scal_shift;
-    fsrc_idx = fsrc_idx < 0.0f ? 0.0f : fsrc_idx;
     fsrc_idx *= idx_scal_mul;
 
     float shift = idx_vec_shift == NULL
         ? 0.0f : idx_vec_shift_coeff * idx_vec_shift[i0];
 
     int src_idx = (int) (fsrc_idx + shift);
-    if (src_idx < 0) {
+
+    if (idx_min >= 0) {
+      src_idx = src_idx < idx_min ? idx_min : src_idx;
+    } else if (src_idx < 0) {
       // Negative index. Read from other end of the source matrix.
       src_idx += src_N;
     }
 
-    if (idx_limit >= 0)
-      src_idx = src_idx < idx_limit ? src_idx : idx_limit;
+    if (idx_max >= 0)
+      src_idx = src_idx < idx_max ? src_idx : idx_max;
 
-    //printf("%d  %5f  %5f  %5f  %5f  %5f  %d\n", i0, idxs[i0], shift, idx_scal_mul, idx_scal_shift, fsrc_idx, src_idx);
+#if DEBUG
+    printf("%d  %5f  %5f  %5f  %5f  %5f  %d\n", i0, idxs[i0], shift, idx_scal_mul, idx_scal_shift, fsrc_idx, src_idx);
+#endif
 
     int src_offset = src_idx * D;
     int dst_offset = i0 * D;
@@ -56,13 +65,14 @@ static void gather_shifted(const GPUDevice& d,
                            const float* src, const float* idxs, float* dst,
                            int src_N, int N, int D, float idx_scal_shift,
                            float idx_scal_mul, float idx_vec_shift_coeff,
-                           float* idx_vec_shift, int idx_limit) {
-  int num_threads = std::min(N, d.getNumCudaMultiProcessors() * d.maxCudaThreadsPerMultiProcessor());
+                           float* idx_vec_shift, int idx_min, int idx_max) {
+  int num_threads = std::min(D, d.getNumCudaMultiProcessors() * d.maxCudaThreadsPerMultiProcessor());
   int num_blocks = std::min(N, d.getNumCudaMultiProcessors());
   // TODO use GetCudaLaunchConfig
   k_gather_shifted<<<num_blocks, num_threads>>>(src, idxs, dst, src_N, N, D,
                                                 idx_scal_shift, idx_scal_mul,
-                                                idx_vec_shift_coeff, idx_vec_shift, idx_limit);
+                                                idx_vec_shift_coeff, idx_vec_shift,
+                                                idx_min, idx_max);
 }
 
 
@@ -113,13 +123,13 @@ void ThinStackLookup<GPUDevice>::operator()(
   // TODO could specialize kernel for this flat-gather case
   gather_shifted(d, queue.data(), cursors.data(), stack2_ptrs.data(),
                  queue.dimension(0), batch_size, 1,
-                 -1.0f, (float) batch_size, 1.0f, batch_range_d.data(), -1);
+                 -1.0f, (float) batch_size, 1.0f, batch_range_d.data(), -1, -1);
 
   // stack2_ptrs = max(0, stack2_ptrs) * batch_size + batch_range
   // stack2 = gather(stack2, stack2_ptrs)
   gather_shifted(d, stack.data(), stack2_ptrs.data(), stack2.data(),
                  stack.dimension(0), batch_size, model_dim,
-                 0.0f, (float) batch_size, 1.0f, batch_range_d.data(), -1);
+                 0.0f, (float) batch_size, 1.0f, batch_range_d.data(), 0, -1);
 
   // buffer_ptrs = (buff_cursors * batch_size) + batch_range
   // buffer_ptrs = max(0, min(buffer_ptrs, buff_size - 1))
@@ -127,7 +137,7 @@ void ThinStackLookup<GPUDevice>::operator()(
   int max_buff_idx = buffer_size - 1.0;
   gather_shifted(d, buffer.data(), buffer_cursors.data(), buffer_top.data(),
                  buffer.dimension(0), batch_size, embedding_dim,
-                 0.0f, (float) batch_size, 1.0f, batch_range_d.data(), max_buff_idx);
+                 0.0f, (float) batch_size, 1.0f, batch_range_d.data(), 0, max_buff_idx);
 
 }
 
