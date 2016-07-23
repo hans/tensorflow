@@ -37,7 +37,7 @@ def _thin_stack_lookup_shape(op):
 
 @ops.RegisterShape("ThinStackUpdate")
 def _thin_stack_update_shape(op):
-    _, _, stack, queue, cursors, buffer_cursors, _ = op.inputs
+    _, _, stack, queue, cursors, buffer_cursors = op.inputs
     return [stack.get_shape(), queue.get_shape(), cursors.get_shape(),
             buffer_cursors.get_shape()]
 

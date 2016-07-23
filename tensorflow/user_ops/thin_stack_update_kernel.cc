@@ -44,12 +44,13 @@ class ThinStackUpdateOp : public OpKernel {
       c->forward_ref_input_to_ref_output(4, 2);
       c->forward_ref_input_to_ref_output(5, 3);
 
-      // Write in the stack top.
-      stack.Slice(t * batch_size, t * batch_size + batch_size).matrix<float>() = input_val.matrix<float>();
+      const Device& d = c->eigen_device<Device>();
+
+      Tensor stack_top = stack.Slice(t * batch_size, t * batch_size + batch_size);
 
       functor::ThinStackUpdate<Device> update_functor;
-      update_functor(c, c->eigen_device<Device>(), t,
-                     transitions.flat<float>(), queue.flat<float>(), cursors.flat<float>(),
+      update_functor(c, d, t, input_val.matrix<float>(), transitions.flat<float>(),
+                     stack_top.matrix<float>(), queue.flat<float>(), cursors.flat<float>(),
                      buffer_cursors.flat<float>());
 
     }
@@ -67,12 +68,17 @@ template <>
 struct ThinStackUpdate<CPUDevice> {
 
   void operator()(OpKernelContext *c, const CPUDevice& d, int32 t,
+                  typename TTypes<float>::ConstMatrix input_val,
                   typename TTypes<float>::ConstFlat transitions,
+                  typename TTypes<float>::Matrix stack_top,
                   typename TTypes<float>::Flat queue,
                   typename TTypes<float>::Flat cursors,
                   typename TTypes<float>::Flat buffer_cursors) {
 
     const int32 batch_size = buffer_cursors.size();
+
+    // Write in stack top.
+    stack_top.device(d) = input_val;
 
     // cursors = cursors + (transitions * -1 + (1 - transitions) * 1)
     // === cursors = cursors + 1 - 2 * transitions
@@ -97,5 +103,25 @@ struct ThinStackUpdate<CPUDevice> {
 
 REGISTER_KERNEL_BUILDER(Name("ThinStackUpdate").Device(DEVICE_CPU).TypeConstraint<float>("T"),
                         ThinStackUpdateOp<CPUDevice>);
+
+
+#if GOOGLE_CUDA
+// Forward declare the GPU functor
+namespace functor {
+template <>
+void ThinStackUpdate<GPUDevice>::operator()(
+    OpKernelContext *c, const GPUDevice& d, int32 t,
+    typename TTypes<float>::ConstMatrix input_val,
+    typename TTypes<float>::ConstFlat transitions,
+    typename TTypes<float>::Matrix stack_top,
+    typename TTypes<float>::Flat queue,
+    typename TTypes<float>::Flat cursors,
+    typename TTypes<float>::Flat buffer_cursors);
+extern template struct ThinStackUpdate<GPUDevice>;
+} // namespace functor
+
+REGISTER_KERNEL_BUILDER(Name("ThinStackUpdate").Device(DEVICE_GPU).TypeConstraint<float>("T"),
+                        ThinStackUpdateOp<GPUDevice>);
+#endif // GOOGLE_CUDA
 
 } // namespace tensorflow

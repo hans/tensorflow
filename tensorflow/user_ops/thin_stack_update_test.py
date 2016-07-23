@@ -55,7 +55,7 @@ class ThinStackUpdateTest(test.TestCase):
                         0., 0.])
       cursors = Variable([0., 2.])
       buffer_cursors = Variable([2., 3.])
-      t = constant_op.constant(3)
+      t = 3
 
       s.run(initialize_variables([stack, buffer, queue, cursors, buffer_cursors]))
 
@@ -67,7 +67,6 @@ class ThinStackUpdateTest(test.TestCase):
                                                  stack_val[5] + stack_val[3]]))
       transitions = tf.expand_dims(constant_op.constant([0., 1.]), 1)
       input_val = transitions * reduce_in + (1. - transitions) * shift_in
-
 
       ret = ts.thin_stack_update(input_val, transitions,
                                  stack, queue, cursors, buffer_cursors, t)
@@ -89,6 +88,10 @@ class ThinStackUpdateTest(test.TestCase):
     self.assertAllEqual(queue_next, queue_expected)
     self.assertAllEqual(cursors_next, cursors_expected)
     self.assertAllEqual(buffer_cursors_next, buffer_cursors_expected)
+
+
+class GpuThinStackUpdateTest(ThinStackUpdateTest):
+    use_gpu = True
 
 
 if __name__ == "__main__":

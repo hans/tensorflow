@@ -28,11 +28,11 @@ REGISTER_OP("ThinStackUpdate")
     .Input("queue: Ref(float)")
     .Input("cursors: Ref(float)")
     .Input("buffer_cursors: Ref(float)")
-    .Input("t: int32")
     .Output("stack_out: Ref(T)")
     .Output("queue_out: Ref(float)")
     .Output("cursors_out: Ref(float)")
     .Output("buffer_cursors_out: Ref(float)")
+    .Attr("timestep: int")
     .Attr("T: {float}")
     .Doc(R"doc(
 Perform inplace update on thin-stack representation.

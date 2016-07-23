@@ -137,6 +137,10 @@ tf_custom_op_library(
         "thin_stack_lookup_kernel.cu.cc",
         "thin_stack_lookup_kernel.h",
 
+        "thin_stack_update_kernel.cc",
+        "thin_stack_update_kernel.cu.cc",
+        "thin_stack_update_kernel.h",
+
         "floaty_gather_kernel.cc",
         "floaty_gather_kernel_gpu.cu.cc",
         "floaty_gather_kernel.h",
@@ -183,6 +187,14 @@ py_test(
     srcs = ["thin_stack_update_test.py"],
     deps = [":thin_stack_ops"],
     data = [":thin_stack_ops_impl.so"],
+)
+
+cuda_py_test(
+    name = "thin_stack_update_test_gpu",
+    main = "thin_stack_update_test.py",
+    srcs = ["thin_stack_update_test.py"],
+    additional_deps = [":thin_stack_ops_gpu"],
+    data = [":thin_stack_ops_impl_gpu"],
 )
 
 
