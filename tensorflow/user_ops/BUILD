@@ -121,6 +121,9 @@ tf_custom_op_library(
       "thin_stack_lookup_kernel.cc",
       "thin_stack_lookup_kernel.h",
 
+      "thin_stack_lookup_grad_kernel.cc",
+      "thin_stack_lookup_grad_kernel.h",
+
       "thin_stack_update_kernel.cc",
       "thin_stack_update_kernel.h",
 

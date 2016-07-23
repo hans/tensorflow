@@ -21,6 +21,24 @@ Perform thin-stack lookup operation.
 )doc");
 
 
+REGISTER_OP("ThinStackLookupGrad")
+    .Input("stack: Ref(T)")
+    .Input("buffer: Ref(T)")
+    .Input("stack2_ptrs: float")
+    .Input("buffer_cursors: float")
+    .Input("grad_stack1: float")
+    .Input("grad_stack2: float")
+    .Input("grad_buf_top: float")
+    .Output("stack_out: Ref(T)")
+    .Output("buffer_out: Ref(T)")
+    .Attr("timestep: int")
+    .Attr("T: {float}")
+    .Doc(R"doc(
+Backward pass of ThinStackLookup op. Writes inplace onto a stack, which will be
+automatically zeroed out if we are at the last timestep.
+)doc");
+
+
 REGISTER_OP("ThinStackUpdate")
     .Input("input_val: T")
     .Input("transitions: float")

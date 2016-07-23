@@ -7,6 +7,8 @@ import os
 from tensorflow.python.framework.load_library import load_op_library
 from tensorflow.python.framework.tensor_shape import TensorShape
 from tensorflow.python.framework import ops
+from tensorflow.python.ops import math_ops
+from tensorflow.python.ops import state_ops
 from tensorflow.python.platform import resource_loader
 
 
@@ -35,6 +37,31 @@ def _thin_stack_lookup_shape(op):
     return [stack_el_shape, stack_el_shape, buf_el_shape, stack2_ptrs_shape]
 
 
+@ops.RegisterGradient("ThinStackLookup")
+def _thin_stack_lookup_gradient(op, grad):
+    grad_stack1, grad_stack2, grad_buf_top, _ = grad
+
+    stack, buffer, _, cursors, buffer_cursors = op.inputs[:5]
+    t = op.get_attr("timestep")
+
+    batch_size = cursors.get_shape()[0]
+    batch_range = math_ops.range(batch_size)
+
+    # These updates can happen inplace if the stack and buffer are first zeroed
+    # out.
+
+    # Write grad_stack1 into block (t - 1)
+    stack = tf.scatter_add(stack, (t - 1) * batch_size + batch_range, grad_stack1)
+
+    # Write grad_stack2 using stored lookup pointers
+    stack = tf.scatter_add(stack, stack2_ptrs * batch_size + batch_range, grad_stack2)
+
+    # Write grad_buf_top using buffer_cursors
+    buffer = tf.scatter_add(buffer, buffer_cursors * batch_size + batch_range, grad_buf_top)
+
+    return stack, buffer, None, None, None
+
+
 @ops.RegisterShape("ThinStackUpdate")
 def _thin_stack_update_shape(op):
     _, _, stack, queue, cursors, buffer_cursors = op.inputs
@@ -53,4 +80,3 @@ def _thin_stack_update_gradient(op, grad):
     return input_grad, None, None, None, None, None, None
 
 
-# TODO grad definitions: just invoke grad ops
