@@ -105,15 +105,10 @@ void ThinStackLookup<GPUDevice>::operator()(
 
   // Alloc helpers
   // TODO: do once?
-  Tensor batch_range, queue_ptrs, buffer_ptrs;
+  Tensor batch_range;
   OP_REQUIRES_OK(c, c->allocate_temp(DataTypeToEnum<float>::value,
                                       TensorShape({batch_size}), &batch_range));
-  OP_REQUIRES_OK(c, c->allocate_temp(DataTypeToEnum<float>::value,
-                                      TensorShape({batch_size}), &queue_ptrs));
-  OP_REQUIRES_OK(c, c->allocate_temp(DataTypeToEnum<float>::value,
-                                      TensorShape({batch_size}), &buffer_ptrs));
   TTypes<float>::Flat batch_range_d = batch_range.flat<float>();
-  TTypes<float>::Flat queue_ptrs_d = queue_ptrs.flat<float>();
   CudaLaunchConfig cfg = GetCudaLaunchConfig(batch_size, d);
   k_fill_range<<<cfg.block_count, cfg.thread_per_block>>>(
       batch_range_d.data(), batch_size);
