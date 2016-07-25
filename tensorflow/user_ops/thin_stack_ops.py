@@ -21,6 +21,7 @@ except Exception, e:
   _module = load_op_library(os.path.join(resource_loader.get_data_files_path(), "thin_stack_ops_impl.so"))
 
 thin_stack_lookup = _module.thin_stack_lookup
+_thin_stack_lookup_gradient_impl = _module.thin_stack_lookup_grad
 thin_stack_update = _module.thin_stack_update
 
 
@@ -39,27 +40,21 @@ def _thin_stack_lookup_shape(op):
 
 @ops.RegisterGradient("ThinStackLookup")
 def _thin_stack_lookup_gradient(op, grad):
-    grad_stack1, grad_stack2, grad_buf_top, _ = grad
+    stack, buffer, _, _, buffer_cursors = op.inputs[:5]
+    stack2_ptrs = op.outputs[3]
+    timestep = op.get_attr("timestep")
+    stack1_grad, stack2_grad, buf_top_grad, _ = grad
 
-    stack, buffer, _, cursors, buffer_cursors = op.inputs[:5]
-    t = op.get_attr("timestep")
+    # HACK
+    stack = stack.op.inputs[0]
+    buffer = buffer.op.inputs[0]
 
-    batch_size = cursors.get_shape()[0]
-    batch_range = math_ops.range(batch_size)
+    stack_grad, buffer_grad = _thin_stack_lookup_gradient_impl(
+            stack, buffer, stack2_ptrs, buffer_cursors,
+            stack1_grad, stack2_grad, buf_top_grad, timestep)
 
-    # These updates can happen inplace if the stack and buffer are first zeroed
-    # out.
-
-    # Write grad_stack1 into block (t - 1)
-    stack = tf.scatter_add(stack, (t - 1) * batch_size + batch_range, grad_stack1)
-
-    # Write grad_stack2 using stored lookup pointers
-    stack = tf.scatter_add(stack, stack2_ptrs * batch_size + batch_range, grad_stack2)
-
-    # Write grad_buf_top using buffer_cursors
-    buffer = tf.scatter_add(buffer, buffer_cursors * batch_size + batch_range, grad_buf_top)
-
-    return stack, buffer, None, None, None
+    with ops.control_dependencies([stack_grad, buffer_grad]):
+        return stack_grad, buffer_grad, None, None, None
 
 
 @ops.RegisterShape("ThinStackUpdate")

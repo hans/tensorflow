@@ -14,8 +14,8 @@ struct ThinStackLookupGrad {
   void operator()(OpKernelContext *c, const Device& d, int32 t,
                   typename TTypes<float>::ConstMatrix stack2_grad,
                   typename TTypes<float>::ConstMatrix buf_top_grad,
-                  typename TTypes<float>::ConstMatrix stack2_ptrs,
-                  typename TTypes<float>::ConstMatrix buffer_cursors,
+                  typename TTypes<float>::ConstFlat stack2_ptrs,
+                  typename TTypes<float>::ConstFlat buffer_cursors,
                   typename TTypes<float>::Matrix stack,
                   typename TTypes<float>::Matrix buffer);
 };

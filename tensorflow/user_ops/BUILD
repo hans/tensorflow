@@ -185,6 +185,14 @@ cuda_py_test(
 )
 
 py_test(
+    name = "thin_stack_lookup_grad_test",
+    size = "small",
+    srcs = ["thin_stack_lookup_grad_test.py"],
+    deps = [":thin_stack_ops"],
+    data = [":thin_stack_ops_impl.so"],
+)
+
+py_test(
     name = "thin_stack_update_test",
     size = "small",
     srcs = ["thin_stack_update_test.py"],
