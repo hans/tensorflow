@@ -34,7 +34,7 @@ class ThinStackLookupGradOp : public OpKernel {
 
       // NB: not acquiring lock here; it's okay; we're running backprop
       // sequentially anyway
-      Tensor stack = c->mutable_input(0, true);
+      Tensor stack = c->mutable_input(0, false);
       Tensor buffer = c->mutable_input(1, true);
 
       // Forward Ref outputs.
@@ -88,10 +88,10 @@ struct ThinStackLookupGrad<CPUDevice> {
 
     for (int32 i = 0; i < batch_size; i++) {
       float stack2_ptr = stack2_ptrs(i) * batch_size + i;
-      stack(stack2_ptr) = stack2_grad(i);
+      stack.chip(stack2_ptr, 0) = stack2_grad.chip(i, 0);
 
       float buffer_ptr = buffer_cursors(i) * batch_size + i;
-      buffer(buffer_ptr) = buf_top_grad(i);
+      buffer.chip(buffer_ptr, 0) = buf_top_grad.chip(i, 0);
     }
 
   }
