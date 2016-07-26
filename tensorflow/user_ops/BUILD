@@ -220,6 +220,14 @@ cuda_py_test(
     data = [":thin_stack_ops_impl_gpu"],
 )
 
+py_test(
+    name = "thin_stack_test",
+    size = "small",
+    srcs = ["thin_stack_test.py"],
+    deps = [":thin_stack_ops"],
+    data = [":thin_stack_ops_impl.so"],
+)
+
 
 
 filegroup(
