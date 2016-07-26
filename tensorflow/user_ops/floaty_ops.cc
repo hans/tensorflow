@@ -65,4 +65,18 @@ This is just like ScatterUpdate except that `indices` are floats.
 )doc");
 
 
+REGISTER_OP("FloatyScatterAdd")
+    .Input("ref: Ref(T)")
+    .Input("indices: Tindices")
+    .Input("updates: T")
+    .Output("output_ref: Ref(T)")
+    .Attr("T: type")
+    .Attr("Tindices: {float}")
+    .Attr("use_locking: bool = true")
+    .Doc(R"doc(
+Applies sparse increments to a variable reference.
+This is just like ScatterAdd except that `indices` are floats.
+)doc");
+
+
 }  // namespace tensorflow

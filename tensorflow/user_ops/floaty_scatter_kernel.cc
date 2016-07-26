@@ -42,6 +42,13 @@ struct Assign<floaty_scatter_kernel::UpdateOp::ASSIGN> {
     p = u;
   }
 };
+template <>
+struct Assign<floaty_scatter_kernel::UpdateOp::ADD> {
+  template <typename Params, typename Update>
+  static void Run(Params p, Update u) {
+    p += u;
+  }
+};
 
 }  // namespace
 
@@ -181,23 +188,33 @@ struct FloatyScatterFunctor<CPUDevice, T, Index, op> {
 #define REGISTER_SCATTER_KERNEL(type, dev, name, op)         \
   REGISTER_SCATTER_KERNEL_INDEX(type, float, dev, name, op);
 
+#define REGISTER_SCATTER_ADD(type, dev) \
+  REGISTER_SCATTER_KERNEL(type, dev, "FloatyScatterAdd", floaty_scatter_kernel::UpdateOp::ADD);
+
 #define REGISTER_SCATTER_UPDATE(type, dev)            \
   REGISTER_SCATTER_KERNEL(type, dev, "FloatyScatterUpdate", \
                           floaty_scatter_kernel::UpdateOp::ASSIGN);
 
 // Registers CPU kernels.
+#define REGISTER_SCATTER_ADD_CPU(type) REGISTER_SCATTER_ADD(type, CPU);
 #define REGISTER_SCATTER_UPDATE_CPU(type) REGISTER_SCATTER_UPDATE(type, CPU);
 
+TF_CALL_NUMBER_TYPES(REGISTER_SCATTER_ADD_CPU);
 TF_CALL_ALL_TYPES(REGISTER_SCATTER_UPDATE_CPU);
 
 // Registers GPU kernels.
 #if GOOGLE_CUDA
+#define REGISTER_SCATTER_ADD_GPU(type) REGISTER_SCATTER_ADD(type, GPU);
 #define REGISTER_SCATTER_UPDATE_GPU(type) REGISTER_SCATTER_UPDATE(type, GPU);
 
+TF_CALL_GPU_NUMBER_TYPES_NO_HALF(REGISTER_SCATTER_ADD_GPU);
 TF_CALL_GPU_NUMBER_TYPES_NO_HALF(REGISTER_SCATTER_UPDATE_GPU);
 
 #endif  // GOOGLE_CUDA
 
+#undef REGISTER_SCATTER_ADD
+#undef REGISTER_SCATTER_ADD_CPU
+#undef REGISTER_SCATTER_ADD_GPU
 #undef REGISTER_SCATTER_UPDATE
 #undef REGISTER_SCATTER_UPDATE_CPU
 #undef REGISTER_SCATTER_UPDATE_GPU
@@ -218,7 +235,8 @@ namespace functor {
   extern template struct FloatyScatterFunctor<GPUDevice, T, Index, op>;
 
 #define DECLARE_GPU_SPECS_INDEX(T, Index)                       \
-  DECLARE_GPU_SPECS_OP(T, Index, floaty_scatter_kernel::UpdateOp::ASSIGN);
+  DECLARE_GPU_SPECS_OP(T, Index, floaty_scatter_kernel::UpdateOp::ASSIGN); \
+  DECLARE_GPU_SPECS_OP(T, Index, floaty_scatter_kernel::UpdateOp::ADD);
 
 #define DECLARE_GPU_SPECS(T)         \
   DECLARE_GPU_SPECS_INDEX(T, float);

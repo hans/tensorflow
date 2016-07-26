@@ -78,7 +78,8 @@ struct FloatyScatterFunctor<GPUDevice, T, Index, op> {
   template struct functor::FloatyScatterFunctor<GPUDevice, T, Index, op>;
 
 #define DEFINE_GPU_SPECS_INDEX(T, Index)                        \
-  DEFINE_GPU_SPECS_OP(T, Index, floaty_scatter_kernel::UpdateOp::ASSIGN);
+  DEFINE_GPU_SPECS_OP(T, Index, floaty_scatter_kernel::UpdateOp::ASSIGN); \
+  DEFINE_GPU_SPECS_OP(T, Index, floaty_scatter_kernel::UpdateOp::ADD);
 
 #define DEFINE_GPU_SPECS(T)                     \
   DEFINE_GPU_SPECS_INDEX(T, float);

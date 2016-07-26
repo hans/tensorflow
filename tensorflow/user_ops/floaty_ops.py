@@ -18,6 +18,7 @@ from tensorflow.python.ops import math_ops
 _module = tf.load_op_library(os.path.join(tf.resource_loader.get_data_files_path(), "floaty_ops_impl.so"))
 
 floaty_gather = _module.floaty_gather
+floaty_scatter_add = _module.floaty_scatter_add
 floaty_scatter_update = _module.floaty_scatter_update
 
 
@@ -45,6 +46,7 @@ def _FloatyGatherGrad(op, grad):
   return [ops.IndexedSlices(values, indices, dense_shape), None]
 
 
+@tf.RegisterShape("FloatyScatterAdd")
 @tf.RegisterShape("FloatyScatterUpdate")
 def _floaty_scatter_update_shape(op):
     var_shape = op.inputs[0].get_shape()
@@ -52,6 +54,9 @@ def _floaty_scatter_update_shape(op):
     unused_updates_shape = op.inputs[2].get_shape().merge_with(
             indices_shape.concatenate(var_shape[1:]))
     return [var_shape]
+
+
+ops.NoGradient("FloatyScatterAdd")
 
 
 @tf.RegisterGradient("FloatyScatterUpdate")
