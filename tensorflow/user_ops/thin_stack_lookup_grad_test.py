@@ -83,8 +83,8 @@ class ThinStackLookupGradTest(test.TestCase):
     print(ret)
 
 
-# class GpuThinStackLookupGradTest(ThinStackLookupTest):
-#   use_gpu = True
+class GpuThinStackLookupGradTest(ThinStackLookupGradTest):
+  use_gpu = True
 
 
 if __name__ == "__main__":
