@@ -43,10 +43,10 @@ class ThinStackLookupOp : public OpKernel {
       OP_REQUIRES_OK(c, c->allocate_output(2, buffer_elm_shape, &buf_top_out));
       OP_REQUIRES_OK(c, c->allocate_output(3, cursors.shape(), &stack2_ptrs));
 
-      // stack1 read is a simple memory share; happens outside device-specific
+      // stack1 read is a simple memory copy; happens outside device-specific
       // functor / implementation
-      int32 start_row = (t - 1) * batch_size;
-      stack1_out->CopyFrom(stack.Slice(start_row, start_row + batch_size), stack1_out->shape());
+      int32 start_row = std::max((t - 1) * batch_size, 0);
+      stack1_out->matrix<float>().device(c->eigen_device<Device>()) = stack.Slice(start_row, start_row + batch_size).matrix<float>();
 
       functor::ThinStackLookup<Device> lookup_functor;
       lookup_functor(c, c->eigen_device<Device>(), t,
