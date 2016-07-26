@@ -11,7 +11,10 @@ from tensorflow.python.framework import ops
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import state_ops
+from tensorflow.python.ops import gen_state_ops
 from tensorflow.python.platform import resource_loader
+
+from tensorflow.user_ops import floaty_ops
 
 
 try:
@@ -42,30 +45,42 @@ def _thin_stack_lookup_shape(op):
 
 @ops.RegisterGradient("ThinStackLookup")
 def _thin_stack_lookup_gradient(op, grad_stack1, grad_stack2, grad_buf_top, _):
+    grad_stack1 = tf.Print(grad_stack1, [grad_stack1], "grad_stack1")
     stack, buffer, _, _, buffer_cursors = op.inputs[:5]
     stack2_ptrs = op.outputs[3]
     t = op.get_attr("timestep")
 
     batch_size = buffer_cursors.get_shape().as_list()[0]
+    num_tokens = buffer.get_shape().as_list()[0] / batch_size
     batch_range = math_ops.range(batch_size)
+    batch_range_i = tf.to_float(batch_range)
 
-    # # Write grad_stack1 into block (t - 1)
-    # grad_stack = tf.scatter_add(grad_stack, (t - 1) * batch_size + batch_range, grad_stack1)
+    grad_stack = gen_state_ops._temporary_variable(stack.get_shape().as_list(), tf.float32, "grad_stack%i" % t)
+    grad_buffer = gen_state_ops._temporary_variable(buffer.get_shape().as_list(), tf.float32, "grad_buffer%i" % t)
 
-    # # Write grad_stack2 using stored lookup pointers
-    # grad_stack = tf.scatter_add(grad_stack, stack2_ptrs * batch_size + batch_range, grad_stack2)
+    updates = []
 
-    # # Write grad_buf_top using buffer_cursors
-    # grad_buffer = tf.scatter_add(grad_buffer, buffer_cursors * batch_size + batch_range, grad_buf_top)
+    # Write grad_stack1 into block (t - 1)
+    if t >= 1:
+      in_cursors = (t - 1) * batch_size + batch_range
+      grad_stack = tf.scatter_add(grad_stack, in_cursors, grad_stack1)
 
-    stack_values = tf.concat(0, [grad_stack1, grad_stack2])
-    stack_indices = tf.concat(0, [(t - 1) * batch_size + batch_range,
-                                  tf.to_int32(stack2_ptrs) * batch_size + batch_range])
+    # Write grad_stack2 using stored lookup pointers
+    # TODO: Should be scatter_add
+    grad_stack = floaty_ops.floaty_scatter_update(grad_stack, stack2_ptrs * batch_size + batch_range_i, grad_stack2)
 
-    buffer_indices = tf.to_int32(buffer_cursors) * batch_size + batch_range
+    # Write grad_buf_top using buffer_cursors
+    # TODO: Should be scatter_add
+    grad_buf_top = tf.Print(grad_buf_top, [grad_buf_top], "grad_buf_top")
+    buffer_ptrs = tf.minimum((float) (num_tokens * batch_size) - 1.0,
+                             buffer_cursors * batch_size + batch_range_i)
+    grad_buffer = floaty_ops.floaty_scatter_update(grad_buffer, buffer_ptrs, grad_buf_top)
 
-    grad_stack = tf.IndexedSlices(stack_values, stack_indices, stack.get_shape())
-    grad_buffer = tf.IndexedSlices(grad_buf_top, buffer_indices, buffer.get_shape())
+    with tf.control_dependencies([grad_stack, grad_buffer]):
+      grad_stack = gen_state_ops._destroy_temporary_variable(grad_stack, "grad_stack%i" % t)
+      grad_buffer = gen_state_ops._destroy_temporary_variable(grad_buffer, "grad_buffer%i" % t)
+      grad_stack = tf.Print(grad_stack, [grad_stack], "grad_stack")
+      grad_buffer = tf.Print(grad_buffer, [grad_buffer], "grad_buffer")
 
     return grad_stack, grad_buffer, None, None, None
 
@@ -79,7 +94,6 @@ def _thin_stack_lookup_metal_gradient(op, stack1_grad, stack2_grad, buf_top_grad
     # HACK
     stack = stack.op.inputs[0]
     buffer = buffer.op.inputs[0]
-    print(stack, buffer)
 
     stack_grad, buffer_grad = _thin_stack_lookup_gradient_impl(
             stack, buffer, stack2_ptrs, buffer_cursors,

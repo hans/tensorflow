@@ -128,6 +128,7 @@ tf_custom_op_library(
       "thin_stack_update_kernel.h",
 
       # HACK: 'deps' key doesn't seem to work here.. manually include source files
+      "floaty_ops.cc",
       "floaty_gather_kernel.cc",
       "floaty_gather_kernel.h",
       "floaty_scatter_kernel.cc",
@@ -160,9 +161,14 @@ tf_custom_op_library(
 
 py_library(
     name = "thin_stack_ops",
-    srcs = ["thin_stack_ops.py"],
+    srcs = [
+        "thin_stack_ops.py",
+        "floaty_ops.py",
+    ],
     data = [":thin_stack_ops_impl.so"],
-    deps = ["//tensorflow:tensorflow_py"],
+    deps = [
+        "//tensorflow:tensorflow_py",
+    ],
 )
 
 py_library(

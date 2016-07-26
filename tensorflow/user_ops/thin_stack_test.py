@@ -47,11 +47,10 @@ class IntegratedThinStackTest(test.TestCase):
 
       ######## Run fetches.
       ret = s.run([top, top_sim, grad, grad_sim])
-      top_, top_sim_, grad_, grad_sim_ = ret[:2]
+      top_, top_sim_, grad_, grad_sim_ = ret[:4]
 
     self.assertAllClose(top_, top_sim_)
-    self.assertAllClose(grad_b1_, grad_b1_sim_)
-    self.assertAllClose(grad_b2_, grad_b2_sim_)
+    self.assertAllClose(grad_, grad_sim_)
 
   def _compose(self, stack1, stack2):
     return stack1 + stack2
@@ -66,19 +65,21 @@ class IntegratedThinStackTest(test.TestCase):
 
     # Shift.
     _, _, b1, p1 = ts.thin_stack_lookup(stack, buffer, queue, cursors, buffer_cursors, 0)
-    print(tf.gradients(tf.reduce_sum(b1), buffer))
     updates = ts.thin_stack_update(b1, transitions_shift, stack, queue, cursors, buffer_cursors, 0)
+    stack, queue, cursors, buffer_cursors = updates
 
     with tf.control_dependencies(updates):
       # Shift.
       _, _, b2, p2 = ts.thin_stack_lookup(stack, buffer, queue, cursors, buffer_cursors, 1)
       updates = ts.thin_stack_update(b2, transitions_shift, stack, queue, cursors, buffer_cursors, 1)
+      stack, queue, cursors, buffer_cursors = updates
 
       with tf.control_dependencies(updates):
         # Reduce.
         s1_3, s2_3, _, p3 = ts.thin_stack_lookup(stack, buffer, queue, cursors, buffer_cursors, 2)
         updates = ts.thin_stack_update(self._compose(s1_3, s2_3),
                                        transitions_reduce, stack, queue, cursors, buffer_cursors, 2)
+        stack = updates[0]
 
         with tf.control_dependencies(updates):
           stack_top = stack[batch_size * 2:, :]
