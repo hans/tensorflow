@@ -88,10 +88,10 @@ struct ThinStackLookupGrad<CPUDevice> {
 
     for (int32 i = 0; i < batch_size; i++) {
       float stack2_ptr = stack2_ptrs(i) * batch_size + i;
-      stack.chip(stack2_ptr, 0) = stack2_grad.chip(i, 0);
+      stack.chip(stack2_ptr, 0) += stack2_grad.chip(i, 0);
 
       float buffer_ptr = buffer_cursors(i) * batch_size + i;
-      buffer.chip(buffer_ptr, 0) = buf_top_grad.chip(i, 0);
+      buffer.chip(buffer_ptr, 0) += buf_top_grad.chip(i, 0);
     }
 
   }

@@ -73,14 +73,24 @@ class ThinStackLookupGradTest(test.TestCase):
       buf_top_grad = tf.random_uniform((batch_size, model_dim))
       in_grads = (stack1_grad, stack2_grad, buf_top_grad, None)
 
-      out_grads = ts._thin_stack_lookup_gradient(lookup[0].op, in_grads)
+      # HACK: Zero out stack and buffer before invoking this op.
+      # In a real / full bprop, things would have been zeroed out
+      # at the start of the bprop algorithm.
+      zero_stack = tf.assign(stack, stack * 0.)
+      zero_buffer = tf.assign(buffer, buffer * 0.)
+
+      # Enforce computation order: lookup, then zero out, then grad
+      with tf.control_dependencies(lookup + (zero_stack, zero_buffer)):
+        out_grads = ts._thin_stack_lookup_gradient(lookup[0].op, in_grads)
       out_grads = out_grads[:2]
 
       fetch = out_grads + (stack1_grad, stack2_grad, buf_top_grad)
 
       ret = s.run(fetch)
 
-    print(ret)
+    grad_stack, grad_buffer, stack1_grad, stack2_grad, buf_top_grad = ret
+
+    grad_stack_expected = np.zeros_like(stack_val)
 
 
 class GpuThinStackLookupGradTest(ThinStackLookupGradTest):
