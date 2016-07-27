@@ -11,12 +11,18 @@ from tensorflow.python.framework import common_shapes
 from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
+from tensorflow.python.framework.load_library import load_op_library
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import math_ops
 
 
 # HACK: Load from available thin_stack library
-_module = tf.load_op_library(os.path.join(tf.resource_loader.get_data_files_path(), "thin_stack_ops_impl.so"))
+try:
+  _module = load_op_library("/tf-dev/bazel-bin/tensorflow/user_ops/libthin_stack_ops_impl_gpu.so")
+except Exception, e:
+  print("floaty_ops: ", e)
+  # Load CPU-only.
+  _module = tf.load_op_library(os.path.join(tf.resource_loader.get_data_files_path(), "thin_stack_ops_impl.so"))
 
 floaty_gather = _module.floaty_gather
 floaty_scatter_add = _module.floaty_scatter_add

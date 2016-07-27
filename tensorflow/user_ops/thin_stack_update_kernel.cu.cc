@@ -16,8 +16,9 @@ namespace tensorflow {
 typedef Eigen::GpuDevice GPUDevice;
 
 
-__global__ void k_update(float* queue, float* cursors, float* buffer_cursors,
-                         const float* transitions, int batch_size, float t) {
+__global__ void k_update(float* queue, float* cursors, const float* buffer_cursors,
+                         float* buffer_cursors_out, const float* transitions,
+                         int batch_size, float t) {
   int idx = threadIdx.x + blockIdx.x * blockDim.x;
   if (idx >= batch_size)
     return;
@@ -36,7 +37,7 @@ __global__ void k_update(float* queue, float* cursors, float* buffer_cursors,
   queue[queue_idx] = t;
 
   // buffer_cursors += 1 - transitions
-  buffer_cursors[idx] += 1 - transition;
+  buffer_cursors_out[idx] = buffer_cursors[idx] + 1.0f - transition;
 }
 
 
@@ -46,10 +47,11 @@ void ThinStackUpdate<GPUDevice>::operator()(
         OpKernelContext *c, const GPUDevice& d, int32 t,
         typename TTypes<float>::ConstMatrix input_val,
         typename TTypes<float>::ConstFlat transitions,
+        typename TTypes<float>::ConstFlat buffer_cursors,
         typename TTypes<float>::Matrix stack_top,
         typename TTypes<float>::Flat queue,
         typename TTypes<float>::Flat cursors,
-        typename TTypes<float>::Flat buffer_cursors) {
+        typename TTypes<float>::Flat buffer_cursors_out) {
 
     const int32 batch_size = buffer_cursors.size();
 
@@ -59,7 +61,8 @@ void ThinStackUpdate<GPUDevice>::operator()(
     CudaLaunchConfig cfg = GetCudaLaunchConfig(batch_size, d);
     k_update<<<cfg.block_count, cfg.thread_per_block>>>(
         queue.data(), cursors.data(), buffer_cursors.data(),
-        transitions.data(), batch_size, (float) t);
+        buffer_cursors_out.data(), transitions.data(),
+        batch_size, (float) t);
 
 }
 

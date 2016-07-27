@@ -93,6 +93,7 @@ void ThinStackLookup<GPUDevice>::operator()(
         typename TTypes<float>::ConstFlat queue,
         typename TTypes<float>::ConstFlat cursors,
         typename TTypes<float>::ConstFlat buffer_cursors,
+        typename TTypes<float>::Matrix stack1,
         typename TTypes<float>::Matrix stack2,
         typename TTypes<float>::Matrix buffer_top,
         typename TTypes<float>::Flat stack2_ptrs) {
@@ -112,6 +113,12 @@ void ThinStackLookup<GPUDevice>::operator()(
   CudaLaunchConfig cfg = GetCudaLaunchConfig(batch_size, d);
   k_fill_range<<<cfg.block_count, cfg.thread_per_block>>>(
       batch_range_d.data(), batch_size);
+
+  // Copy over stack top.
+  int32 start_row = std::max((t - 1) * batch_size, 0);
+  Eigen::array<int, 2> offsets = {start_row, 0};
+  Eigen::array<int, 2> extents = {batch_size, model_dim};
+  stack1.device(d) = stack.slice(offsets, extents);
 
   // queue_ptrs = (cursors - 1) * batch_size + batch_range
   // stack2_ptrs = gather(queue, queue_ptrs)

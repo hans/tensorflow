@@ -19,6 +19,7 @@ exports_files(["LICENSE"])
 
 load("//tensorflow:tensorflow.bzl", "py_tests")
 load("//tensorflow:tensorflow.bzl", "cuda_py_test")
+load("//tensorflow:tensorflow.bzl", "cuda_py_tests")
 load("//tensorflow:tensorflow.bzl", "tf_cuda_tests_tags")
 load("//tensorflow:tensorflow.bzl", "tf_custom_op_library")
 
@@ -149,6 +150,7 @@ tf_custom_op_library(
         "thin_stack_update_kernel.cu.cc",
         "thin_stack_update_kernel.h",
 
+        "floaty_ops.cc",
         "floaty_gather_kernel.cc",
         "floaty_gather_kernel_gpu.cu.cc",
         "floaty_gather_kernel.h",
@@ -173,65 +175,37 @@ py_library(
 
 py_library(
     name = "thin_stack_ops_gpu",
-    srcs = ["thin_stack_ops.py"],
+    srcs = [
+        "thin_stack_ops.py",
+        "floaty_ops.py",
+    ],
     data = [":thin_stack_ops_impl_gpu"],
     deps = ["//tensorflow:tensorflow_py"],
 )
 
-py_test(
-    name = "thin_stack_lookup_test",
-    size = "small",
-    srcs = ["thin_stack_lookup_test.py"],
-    deps = [":thin_stack_ops"],
-    data = [":thin_stack_ops_impl.so"],
-)
+# All tests together now!
+# py_tests(
+#     name = "thin_stack_all_tests",
+#     size = "small",
+#     srcs = [
+#         "thin_stack_test.py",
+#         "thin_stack_lookup_test.py",
+#         "thin_stack_update_test.py",
+#     ],
+#     additional_deps = [":thin_stack_ops"],
+#     data = [":thin_stack_ops_impl.so"],
+# )
 
-cuda_py_test(
-    name = "thin_stack_lookup_test_gpu",
-    main = "thin_stack_lookup_test.py",
-    srcs = ["thin_stack_lookup_test.py"],
+cuda_py_tests(
+    name = "thin_stack_all_tests_gpu",
+    size = "small",
+    srcs = [
+        "thin_stack_test.py",
+        "thin_stack_lookup_test.py",
+        "thin_stack_update_test.py",
+    ],
     additional_deps = [":thin_stack_ops_gpu"],
     data = [":thin_stack_ops_impl_gpu"],
-)
-
-py_test(
-    name = "thin_stack_lookup_grad_test",
-    size = "small",
-    srcs = ["thin_stack_lookup_grad_test.py"],
-    deps = [":thin_stack_ops"],
-    data = [":thin_stack_ops_impl.so"],
-)
-
-cuda_py_test(
-    name = "thin_stack_lookup_grad_test_gpu",
-    main = "thin_stack_lookup_grad_test.py",
-    srcs = ["thin_stack_lookup_grad_test.py"],
-    additional_deps = [":thin_stack_ops_gpu"],
-    data = [":thin_stack_ops_impl_gpu"],
-)
-
-py_test(
-    name = "thin_stack_update_test",
-    size = "small",
-    srcs = ["thin_stack_update_test.py"],
-    deps = [":thin_stack_ops"],
-    data = [":thin_stack_ops_impl.so"],
-)
-
-cuda_py_test(
-    name = "thin_stack_update_test_gpu",
-    main = "thin_stack_update_test.py",
-    srcs = ["thin_stack_update_test.py"],
-    additional_deps = [":thin_stack_ops_gpu"],
-    data = [":thin_stack_ops_impl_gpu"],
-)
-
-py_test(
-    name = "thin_stack_test",
-    size = "small",
-    srcs = ["thin_stack_test.py"],
-    deps = [":thin_stack_ops"],
-    data = [":thin_stack_ops_impl.so"],
 )
 
 

@@ -17,6 +17,7 @@ struct ThinStackLookup {
                   typename TTypes<float>::ConstFlat queue,
                   typename TTypes<float>::ConstFlat cursors,
                   typename TTypes<float>::ConstFlat buffer_cursors,
+                  typename TTypes<float>::Matrix stack1,
                   typename TTypes<float>::Matrix stack2,
                   typename TTypes<float>::Matrix buffer_top,
                   typename TTypes<float>::Flat stack2_ptrs);

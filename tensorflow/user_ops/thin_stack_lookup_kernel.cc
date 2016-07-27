@@ -43,16 +43,11 @@ class ThinStackLookupOp : public OpKernel {
       OP_REQUIRES_OK(c, c->allocate_output(2, buffer_elm_shape, &buf_top_out));
       OP_REQUIRES_OK(c, c->allocate_output(3, cursors.shape(), &stack2_ptrs));
 
-      // stack1 read is a simple memory copy; happens outside device-specific
-      // functor / implementation
-      int32 start_row = std::max((t - 1) * batch_size, 0);
-      stack1_out->matrix<float>().device(c->eigen_device<Device>()) = stack.Slice(start_row, start_row + batch_size).matrix<float>();
-
       functor::ThinStackLookup<Device> lookup_functor;
       lookup_functor(c, c->eigen_device<Device>(), t,
                      stack.matrix<float>(), buffer.matrix<float>(), queue.flat<float>(),
                      cursors.flat<float>(), buffer_cursors.flat<float>(),
-                     stack2_out->matrix<float>(),
+                     stack1_out->matrix<float>(), stack2_out->matrix<float>(),
                      buf_top_out->matrix<float>(), stack2_ptrs->flat<float>());
 
     }
@@ -75,12 +70,14 @@ struct ThinStackLookup<CPUDevice> {
                   typename TTypes<float>::ConstFlat queue,
                   typename TTypes<float>::ConstFlat cursors,
                   typename TTypes<float>::ConstFlat buffer_cursors,
+                  typename TTypes<float>::Matrix stack1,
                   typename TTypes<float>::Matrix stack2,
                   typename TTypes<float>::Matrix buffer_top,
                   typename TTypes<float>::Flat stack2_ptrs) {
 
     // Get useful shape constants from inputs.
     const int32 batch_size = buffer_cursors.size();
+    const int32 model_dim = stack.dimension(1);
     const int32 buffer_size = buffer.dimension(0);
 
     // Alloc helpers
@@ -96,6 +93,12 @@ struct ThinStackLookup<CPUDevice> {
     TTypes<float>::Flat queue_ptrs_d = queue_ptrs.flat<float>();
     for (int32 i = 0; i < batch_size; ++i)
       batch_range_d(i) = static_cast<float>(i);
+
+    // Copy over stack top.
+    int32 start_row = std::max((t - 1) * batch_size, 0);
+    Eigen::array<int, 2> offsets = {start_row, 0};
+    Eigen::array<int, 2> extents = {batch_size, model_dim};
+    stack1 = stack.slice(offsets, extents);
 
     functor::FloatyGather<CPUDevice, float, float> gather_functor;
 
@@ -141,6 +144,7 @@ void ThinStackLookup<GPUDevice>::operator()(
     typename TTypes<float>::ConstFlat queue,
     typename TTypes<float>::ConstFlat cursors,
     typename TTypes<float>::ConstFlat buffer_cursors,
+    typename TTypes<float>::Matrix stack1,
     typename TTypes<float>::Matrix stack2,
     typename TTypes<float>::Matrix buffer_top,
     typename TTypes<float>::Flat stack2_ptrs);
