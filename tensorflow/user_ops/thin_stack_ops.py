@@ -64,10 +64,6 @@ def _fetch_buffer_cursors(buffer_cursors):
 
 @ops.RegisterGradient("ThinStackLookup")
 def _thin_stack_lookup_gradient(op, grad_stack1, grad_stack2, grad_buf_top, _):
-    grad_stack1 = tf.Print(grad_stack1, [grad_stack1], "grad_stack1")
-    grad_stack2 = tf.Print(grad_stack2, [grad_stack2], "grad_stack2")
-    grad_buf_top = tf.Print(grad_buf_top, [grad_buf_top], "grad_buf_top")
-
     stack, buffer, _, _, buffer_cursors, transitions = op.inputs
 
     stack2_ptrs = op.outputs[3]
@@ -101,8 +97,6 @@ def _thin_stack_lookup_gradient(op, grad_stack1, grad_stack2, grad_buf_top, _):
     with tf.control_dependencies([grad_stack, grad_buffer]):
       grad_stack = gen_state_ops._destroy_temporary_variable(grad_stack, "grad_stack%i" % t)
       grad_buffer = gen_state_ops._destroy_temporary_variable(grad_buffer, "grad_buffer%i" % t)
-      grad_stack = tf.Print(grad_stack, [grad_stack], "grad_stack", summarize=100)
-      grad_buffer = tf.Print(grad_buffer, [grad_buffer], "grad_buffer", summarize=100)
 
       with tf.control_dependencies([grad_stack, grad_buffer]):
         return grad_stack, grad_buffer, None, None, None, None
@@ -128,7 +122,6 @@ def _thin_stack_lookup_metal_gradient(op, stack1_grad, stack2_grad, buf_top_grad
             timestep)
 
     with ops.control_dependencies(updates):
-        buffer = tf.Print(buffer, [buffer], "buffer", summarize=100)
         return tf.identity(stack), tf.identity(buffer), None, None, None, None
 
 
@@ -144,8 +137,5 @@ def _thin_stack_update_gradient(op, stack_grad, *rest):
     batch_size = op.inputs[4].get_shape().as_list()[0]
     t = op.get_attr("timestep")
 
-    stack_grad = tf.Print(stack_grad, [stack_grad], "---------HERE", summarize=100)#[t * batch_size:(t + 1)*batch_size, :]], "---------------HERE", summarize=100)
-#    input_grad = array_ops.slice(stack_grad, [t * batch_size, 0], [batch_size, -1])
     input_grad = stack_grad[t * batch_size:(t + 1) * batch_size, :]
-
     return input_grad, None, stack_grad, None, None, None
