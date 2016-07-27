@@ -15,7 +15,8 @@ struct ThinStackLookupGrad {
                   typename TTypes<float>::ConstMatrix stack2_grad,
                   typename TTypes<float>::ConstMatrix buf_top_grad,
                   typename TTypes<float>::ConstFlat stack2_ptrs,
-                  typename TTypes<float>::ConstFlat buffer_cursors,
+                  typename TTypes<float>::ConstFlat transitions,
+                  typename TTypes<float>::Flat buffer_cursors,
                   typename TTypes<float>::Matrix stack,
                   typename TTypes<float>::Matrix buffer);
 };

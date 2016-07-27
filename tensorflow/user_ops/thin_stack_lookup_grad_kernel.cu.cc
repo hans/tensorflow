@@ -81,7 +81,8 @@ void ThinStackLookupGrad<GPUDevice>::operator()(
         typename TTypes<float>::ConstMatrix stack2_grad,
         typename TTypes<float>::ConstMatrix buf_top_grad,
         typename TTypes<float>::ConstFlat stack2_ptrs,
-        typename TTypes<float>::ConstFlat buffer_cursors,
+        typename TTypes<float>::ConstFlat transitions,
+        typename TTypes<float>::Flat buffer_cursors,
         typename TTypes<float>::Matrix stack,
         typename TTypes<float>::Matrix buffer) {
 
@@ -119,6 +120,8 @@ void ThinStackLookupGrad<GPUDevice>::operator()(
                       batch_size, embedding_dim,
                       0.0f, (float) batch_size, 1.0f, batch_range_d.data(),
                       max_buff_idx);
+
+  // TODO: Update buffer_cursors
 
 }
 

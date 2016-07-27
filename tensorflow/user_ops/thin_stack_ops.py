@@ -43,9 +43,11 @@ def _thin_stack_lookup_shape(op):
     return [stack_el_shape, stack_el_shape, buf_el_shape, stack2_ptrs_shape]
 
 
-@ops.RegisterGradient("ThinStackLookup")
+#@ops.RegisterGradient("ThinStackLookup")
 def _thin_stack_lookup_gradient(op, grad_stack1, grad_stack2, grad_buf_top, _):
     grad_stack1 = tf.Print(grad_stack1, [grad_stack1], "grad_stack1")
+    grad_stack2 = tf.Print(grad_stack2, [grad_stack2], "grad_stack2")
+    grad_buf_top = tf.Print(grad_buf_top, [grad_buf_top], "grad_buf_top")
     stack, buffer, _, _, buffer_cursors = op.inputs[:5]
     stack2_ptrs = op.outputs[3]
     t = op.get_attr("timestep")
@@ -79,25 +81,40 @@ def _thin_stack_lookup_gradient(op, grad_stack1, grad_stack2, grad_buf_top, _):
       grad_stack = tf.Print(grad_stack, [grad_stack], "grad_stack")
       grad_buffer = tf.Print(grad_buffer, [grad_buffer], "grad_buffer")
 
-    return grad_stack, grad_buffer, None, None, None
+      with tf.control_dependencies([grad_stack, grad_buffer]):
+        return grad_stack, grad_buffer, None, None, None
 
 # Deprecated custom gradient op.
-#@ops.RegisterGradient("ThinStackLookup")
+@ops.RegisterGradient("ThinStackLookup")
 def _thin_stack_lookup_metal_gradient(op, stack1_grad, stack2_grad, buf_top_grad, _):
-    stack, buffer, _, _, buffer_cursors = op.inputs[:5]
+    stack, buffer, _, _, buffer_cursors, transitions = op.inputs
     stack2_ptrs = op.outputs[3]
     timestep = op.get_attr("timestep")
 
-    # HACK
-    stack = stack.op.inputs[0]
-    buffer = buffer.op.inputs[0]
+    # HACK: Recover original Variable instances from op chain
+    while stack.op.type != "Variable":
+      stack = stack.op.inputs[0]
+    while buffer.op.type != "Variable":
+      assert buffer.op.type == "Identity"
+      buffer = buffer.op.inputs[0]
+    while buffer_cursors.op.type != "Variable":
+      if buffer_cursors.op.type == "ThinStackUpdate":
+        buffer_cursors = buffer_cursors.op.inputs[5]
+      elif buffer_cursors.op.type == "ThinStackLookup":
+        buffer_cursors = buffer_cursors.op.inputs[4]
+      elif buffer_cursors.op.type == "Identity":
+        buffer_cursors = buffer_cursors.op.inputs[0]
+      else:
+        raise RuntimeError("unknown op")
 
-    stack_grad, buffer_grad = _thin_stack_lookup_gradient_impl(
+    updates = _thin_stack_lookup_gradient_impl(
             stack, buffer, stack2_ptrs, buffer_cursors,
-            stack1_grad, stack2_grad, buf_top_grad, timestep)
+            stack1_grad, stack2_grad, buf_top_grad, transitions,
+            timestep)
 
-    with ops.control_dependencies([stack_grad, buffer_grad]):
-        return stack_grad, buffer_grad, None, None, None
+    with ops.control_dependencies(updates):
+        buffer = tf.Print(buffer, [buffer], "buffer", summarize=100)
+        return tf.identity(stack), tf.identity(buffer), None, None, None, None
 
 
 @ops.RegisterShape("ThinStackUpdate")
@@ -112,9 +129,8 @@ def _thin_stack_update_gradient(op, stack_grad, *rest):
     batch_size = op.inputs[4].get_shape().as_list()[0]
     t = op.get_attr("timestep")
 
+    stack_grad = tf.Print(stack_grad, [stack_grad], "---------HERE", summarize=100)#[t * batch_size:(t + 1)*batch_size, :]], "---------------HERE", summarize=100)
 #    input_grad = array_ops.slice(stack_grad, [t * batch_size, 0], [batch_size, -1])
     input_grad = stack_grad[t * batch_size:(t + 1) * batch_size, :]
 
     return input_grad, None, None, None, None, None
-
-

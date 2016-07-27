@@ -26,34 +26,37 @@ class ThinStackLookupGradOp : public OpKernel {
 
     void Compute(OpKernelContext *c) override {
       const Tensor& stack2_ptrs = c->input(2);
-      const Tensor& buffer_cursors = c->input(3);
-
       const Tensor& stack1_grad = c->input(4);
       const Tensor& stack2_grad = c->input(5);
       const Tensor& buf_top_grad = c->input(6);
+      const Tensor& transitions = c->input(7);
 
       // NB: not acquiring lock here; it's okay; we're running backprop
       // sequentially anyway
       Tensor stack = c->mutable_input(0, false);
       Tensor buffer = c->mutable_input(1, true);
+      Tensor buffer_cursors = c->mutable_input(3, false);
 
       // Forward Ref outputs.
       c->forward_ref_input_to_ref_output(0, 0);
       c->forward_ref_input_to_ref_output(1, 1);
+      c->forward_ref_input_to_ref_output(3, 2);
 
       // Allocate outputs.
       const int32 batch_size = buffer_cursors.NumElements();
 
       // Pass stack1 gradient back onto stack. Simple copy.
-      int32 start_row = (t - 1) * batch_size;
-      std::cout << start_row << std::endl;
-      stack.Slice(start_row, start_row + batch_size).CopyFrom(stack1_grad, stack1_grad.shape());
+      if (t >= 1) {
+        int32 start_row = (t - 1) * batch_size;
+        stack.Slice(start_row, start_row + batch_size).CopyFrom(stack1_grad, stack1_grad.shape());
+      }
 
       functor::ThinStackLookupGrad<Device> lookup_functor;
       lookup_functor(c, c->eigen_device<Device>(), t,
                      stack2_grad.matrix<float>(), buf_top_grad.matrix<float>(),
-                     stack2_ptrs.flat<float>(), buffer_cursors.flat<float>(),
-                     stack.matrix<float>(), buffer.matrix<float>());
+                     stack2_ptrs.flat<float>(), transitions.flat<float>(),
+                     buffer_cursors.flat<float>(), stack.matrix<float>(),
+                     buffer.matrix<float>());
 
     }
 
@@ -73,24 +76,31 @@ struct ThinStackLookupGrad<CPUDevice> {
                   typename TTypes<float>::ConstMatrix stack2_grad,
                   typename TTypes<float>::ConstMatrix buf_top_grad,
                   typename TTypes<float>::ConstFlat stack2_ptrs,
-                  typename TTypes<float>::ConstFlat buffer_cursors,
+                  typename TTypes<float>::ConstFlat transitions,
+                  typename TTypes<float>::Flat buffer_cursors,
                   typename TTypes<float>::Matrix stack,
                   typename TTypes<float>::Matrix buffer) {
 
     // Zero out the stack and buffer if this is our last timestep.
     int32 batch_size = buffer_cursors.size();
     int32 num_timesteps = stack.dimension(0) / batch_size;
-    std::cout << t << " " << num_timesteps << std::endl;
+    int32 buffer_size = buffer.dimension(0);
     if (t == num_timesteps - 1) {
       stack.setZero();
       buffer.setZero();
     }
+
+    // Rewind buffer cursors based on transitions.
+    buffer_cursors += -1.0f + transitions;
 
     for (int32 i = 0; i < batch_size; i++) {
       float stack2_ptr = stack2_ptrs(i) * batch_size + i;
       stack.chip(stack2_ptr, 0) += stack2_grad.chip(i, 0);
 
       float buffer_ptr = buffer_cursors(i) * batch_size + i;
+      if (buffer_ptr >= buffer_size)
+        continue;
+      std::cout << "buffer_ptr at (" << t << ", " << i << "): " << buffer_ptr << std::endl;
       buffer.chip(buffer_ptr, 0) += buf_top_grad.chip(i, 0);
     }
 
@@ -114,7 +124,8 @@ void ThinStackLookupGrad<GPUDevice>::operator()(
     typename TTypes<float>::ConstMatrix stack2_grad,
     typename TTypes<float>::ConstMatrix buf_top_grad,
     typename TTypes<float>::ConstFlat stack2_ptrs,
-    typename TTypes<float>::ConstFlat buffer_cursors,
+    typename TTypes<float>::ConstFlat transitions,
+    typename TTypes<float>::Flat buffer_cursors,
     typename TTypes<float>::Matrix stack,
     typename TTypes<float>::Matrix buffer);
 extern template struct ThinStackLookupGrad<GPUDevice>;

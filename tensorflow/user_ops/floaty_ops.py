@@ -15,7 +15,8 @@ from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import math_ops
 
 
-_module = tf.load_op_library(os.path.join(tf.resource_loader.get_data_files_path(), "floaty_ops_impl.so"))
+# HACK: Load from available thin_stack library
+_module = tf.load_op_library(os.path.join(tf.resource_loader.get_data_files_path(), "thin_stack_ops_impl.so"))
 
 floaty_gather = _module.floaty_gather
 floaty_scatter_add = _module.floaty_scatter_add
