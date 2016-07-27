@@ -54,10 +54,10 @@ class ThinStackUpdateTest(test.TestCase):
                         0., 0.,
                         0., 0.])
       cursors = Variable([0., 2.])
-      buffer_cursors = Variable([2., 3.])
+      buffer_cursors = constant_op.constant([2., 3.])
       t = 3
 
-      s.run(initialize_variables([stack, buffer, queue, cursors, buffer_cursors]))
+      s.run(initialize_variables([stack, buffer, queue, cursors]))
 
       stack_val = stack.eval()
       buffer_val = buffer.eval()
