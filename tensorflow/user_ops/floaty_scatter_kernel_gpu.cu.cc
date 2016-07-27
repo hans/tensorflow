@@ -45,6 +45,10 @@ __global__ void FloatyScatterOpCustomKernel(
         params[params_i] = ldg(updates + updates_i);
         break;
       }
+      case floaty_scatter_kernel::UpdateOp::ADD: {
+        CudaAtomicAdd(params + params_i, ldg(updates + updates_i));
+        break;
+      }
     }
   }
 }
