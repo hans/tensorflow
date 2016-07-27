@@ -41,7 +41,8 @@ class IntegratedThinStackTest(test.TestCase):
       ######## Bprop test.
       # Get some scalar error signal for grad calculation
       top, top_sim = tf.reduce_sum(top), tf.reduce_sum(top_sim)
-      grad = tf.gradients(top, buffer)[0]
+      with tf.control_dependencies([top]):
+        grad = tf.gradients(top, buffer)[0]
       grad_sim = tf.gradients(top_sim, buffer)[0]
 
       ######## Run fetches.

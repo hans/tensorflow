@@ -29,12 +29,12 @@ class ThinStackUpdateOp : public OpKernel {
     void Compute(OpKernelContext *c) override {
       const Tensor& input_val = c->input(0);
       const Tensor& transitions = c->input(1);
+      const Tensor& buffer_cursors = c->input(5);
 
       // NB: acquires write lock on data -- probably not necessary
       Tensor stack = c->mutable_input(2, false);
       Tensor queue = c->mutable_input(3, true);
       Tensor cursors = c->mutable_input(4, true);
-      Tensor buffer_cursors = c->mutable_input(5, true);
 
       const int32 batch_size = buffer_cursors.NumElements();
 
@@ -42,7 +42,10 @@ class ThinStackUpdateOp : public OpKernel {
       c->forward_ref_input_to_ref_output(2, 0);
       c->forward_ref_input_to_ref_output(3, 1);
       c->forward_ref_input_to_ref_output(4, 2);
-      c->forward_ref_input_to_ref_output(5, 3);
+
+      // Allocate other outputs.
+      Tensor *buffer_cursors_out;
+      OP_REQUIRES_OK(c, c->allocate_output(3, buffer_cursors.shape(), &buffer_cursors_out));
 
       const Device& d = c->eigen_device<Device>();
 
@@ -50,8 +53,9 @@ class ThinStackUpdateOp : public OpKernel {
 
       functor::ThinStackUpdate<Device> update_functor;
       update_functor(c, d, t, input_val.matrix<float>(), transitions.flat<float>(),
+                     buffer_cursors.flat<float>(),
                      stack_top.matrix<float>(), queue.flat<float>(), cursors.flat<float>(),
-                     buffer_cursors.flat<float>());
+                     buffer_cursors_out->flat<float>());
 
     }
 
@@ -70,10 +74,11 @@ struct ThinStackUpdate<CPUDevice> {
   void operator()(OpKernelContext *c, const CPUDevice& d, int32 t,
                   typename TTypes<float>::ConstMatrix input_val,
                   typename TTypes<float>::ConstFlat transitions,
+                  typename TTypes<float>::ConstFlat buffer_cursors,
                   typename TTypes<float>::Matrix stack_top,
                   typename TTypes<float>::Flat queue,
                   typename TTypes<float>::Flat cursors,
-                  typename TTypes<float>::Flat buffer_cursors) {
+                  typename TTypes<float>::Flat buffer_cursors_out) {
 
     const int32 batch_size = buffer_cursors.size();
 
@@ -93,7 +98,7 @@ struct ThinStackUpdate<CPUDevice> {
       queue(idx) = static_cast<float>(t);
     }
 
-    buffer_cursors.device(d) += 1.0f - transitions;
+    buffer_cursors_out.device(d) = buffer_cursors + 1.0f - transitions;
 
   }
 
@@ -113,10 +118,11 @@ void ThinStackUpdate<GPUDevice>::operator()(
     OpKernelContext *c, const GPUDevice& d, int32 t,
     typename TTypes<float>::ConstMatrix input_val,
     typename TTypes<float>::ConstFlat transitions,
+    typename TTypes<float>::ConstFlat buffer_cursors,
     typename TTypes<float>::Matrix stack_top,
     typename TTypes<float>::Flat queue,
     typename TTypes<float>::Flat cursors,
-    typename TTypes<float>::Flat buffer_cursors);
+    typename TTypes<float>::Flat buffer_cursors_out);
 extern template struct ThinStackUpdate<GPUDevice>;
 } // namespace functor
 
