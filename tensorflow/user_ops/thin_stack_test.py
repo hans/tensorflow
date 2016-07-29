@@ -18,6 +18,8 @@ class IntegratedThinStackTest(test.TestCase):
     Test the simplest possible transition sequence on a batch of random inputs.
     """
 
+    tf.reset_default_graph()
+
     embedding_dim = model_dim
     num_tokens = (num_timesteps + 1) / 2
 
@@ -28,11 +30,11 @@ class IntegratedThinStackTest(test.TestCase):
       cursors = Variable(np.zeros((batch_size,), dtype=np.float32) - 1., name="cursors")
       buffer_cursors = Variable(np.zeros((batch_size,), dtype=np.float32), name="buffer_cursors")
 
-      s.run(initialize_variables([stack, buffer, queue, cursors, buffer_cursors]))
-
       ######## Fprop test.
       top = ff_fun(batch_size, stack, buffer, queue, cursors, buffer_cursors)
       top_sim = sim_fun(buffer)
+
+      s.run(initialize_variables(tf.all_variables()))
 
       ######## Bprop test.
       # Get some scalar error signal for grad calculation
@@ -49,7 +51,12 @@ class IntegratedThinStackTest(test.TestCase):
     self.assertAllClose(grad_, grad_sim_)
 
   def _compose(self, stack1, stack2):
-    return stack1 + stack2
+    if not hasattr(self, "W"):
+      batch_size, model_dim = stack1.get_shape().as_list()
+      self.W = tf.get_variable("W", (model_dim * 2, model_dim))
+
+    ret = tf.matmul(tf.concat(1, [stack1, stack2]), self.W)
+    return ret
 
   def _run_ff_3(self, batch_size, stack, buffer, queue, cursors, buffer_cursors):
     """
